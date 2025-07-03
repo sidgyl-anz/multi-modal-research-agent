@@ -19,9 +19,10 @@ COPY pyproject.toml poetry.lock* langgraph.json ./
 COPY src/ ./src/
 
 # Install dependencies using uv
-# We install . (project dependencies) and langgraph-cli
+# We install . (project dependencies) and langgraph-cli with the [inmem] extra
+# as suggested by the error messages and README for the dev server.
 # Using --system to install into the global site-packages
-RUN uv pip install --system . langgraph-cli
+RUN uv pip install --system . "langgraph-cli[inmem]"
 
 # Copy .env.example to .env
 # In a production Cloud Run environment, environment variables should be set directly
