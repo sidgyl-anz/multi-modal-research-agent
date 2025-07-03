@@ -39,5 +39,5 @@ EXPOSE 8080
 # Cloud Run will set the PORT environment variable.
 # The --allow-blocking flag was present in the original README command.
 # --config langgraph.json explicitly points to the config.
-# Explicitly specify that 'langgraph' executable comes from 'langgraph-cli' package for uvx.
-CMD ["sh", "-c", "uvx --from langgraph-cli langgraph dev --host 0.0.0.0 --port ${PORT:-8080} --config langgraph.json --allow-blocking"]
+# Call langgraph directly, assuming it's on PATH after system-wide installation.
+CMD ["sh", "-c", "langgraph dev --host 0.0.0.0 --port ${PORT:-8080} --config langgraph.json --allow-blocking"]
