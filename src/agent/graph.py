@@ -92,13 +92,13 @@ def create_podcast_node(state: ResearchState, config: RunnableConfig) -> dict:
     safe_topic = "".join(c for c in topic if c.isalnum() or c in (' ', '-', '_')).rstrip()
     filename = f"research_podcast_{safe_topic.replace(' ', '_')}.wav"
     
-    podcast_script, podcast_filename = create_podcast_discussion(
+    podcast_script, podcast_url = create_podcast_discussion(
         topic, search_text, video_text, search_sources_text, video_url, filename, configuration
     )
     
     return {
         "podcast_script": podcast_script,
-        "podcast_filename": podcast_filename
+        "podcast_url": podcast_url # Changed from podcast_filename
     }
 
 

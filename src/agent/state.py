@@ -13,7 +13,7 @@ class ResearchStateOutput(TypedDict):
     # Final outputs
     report: Optional[str]
     podcast_script: Optional[str]
-    podcast_filename: Optional[str]
+    podcast_url: Optional[str] # Changed from podcast_filename
 
 class ResearchState(TypedDict):
     """State for the research and podcast generation workflow"""
@@ -30,4 +30,4 @@ class ResearchState(TypedDict):
     report: Optional[str]
     synthesis_text: Optional[str]
     podcast_script: Optional[str]
-    podcast_filename: Optional[str]
+    podcast_url: Optional[str] # Changed from podcast_filename
