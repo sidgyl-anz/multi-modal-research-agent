@@ -1,6 +1,8 @@
 import os
 import wave
+import datetime # For signed URL expiration
 from google.genai import Client, types
+from google.cloud import storage # For GCS operations
 from rich.console import Console
 from rich.markdown import Markdown
 from dotenv import load_dotenv
@@ -147,9 +149,52 @@ def create_podcast_discussion(topic, search_text, video_text, search_sources_tex
     # Step 3: Save audio file
     audio_data = response.candidates[0].content.parts[0].inline_data.data
     wave_file(filename, audio_data, configuration.tts_channels, configuration.tts_rate, configuration.tts_sample_width)
-    
-    print(f"Podcast saved as: {filename}")
-    return podcast_script, filename
+    print(f"Podcast saved locally as: {filename}")
+
+    # Step 4: Upload to GCS and generate signed URL
+    gcs_bucket_name = os.getenv("GCS_BUCKET_NAME")
+    if not gcs_bucket_name:
+        print("GCS_BUCKET_NAME environment variable not set. Skipping GCS upload.")
+        # Fallback: In a real scenario, you might want to handle this more gracefully
+        # or make GCS upload mandatory. For now, we'll return None for the URL.
+        # Alternatively, if running locally without GCS, one might want to serve the local file.
+        # However, for Cloud Run, GCS is the way for persistent, accessible files.
+        return podcast_script, None # Or raise an error
+
+    try:
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(gcs_bucket_name)
+
+        # Sanitize filename for GCS path if necessary, though current filename is likely fine
+        # The filename already includes topic, making it somewhat unique.
+        # Adding a timestamp or UUID could make it more robustly unique if needed.
+        blob_name = f"podcasts/{filename}"
+        blob = bucket.blob(blob_name)
+
+        blob.upload_from_filename(filename)
+        print(f"Uploaded {filename} to gs://{gcs_bucket_name}/{blob_name}")
+
+        # Generate a signed URL for the blob, valid for 1 hour
+        expiration_time = datetime.timedelta(hours=1)
+        signed_url = blob.generate_signed_url(
+            version="v4",
+            expiration=expiration_time,
+            method="GET",
+        )
+        print(f"Generated signed URL: {signed_url}")
+
+        # Clean up local file after upload (optional, good for stateless environments)
+        try:
+            os.remove(filename)
+            print(f"Removed local file: {filename}")
+        except OSError as e:
+            print(f"Error removing local file {filename}: {e}")
+
+        return podcast_script, signed_url
+    except Exception as e:
+        print(f"Error during GCS upload or signed URL generation: {e}")
+        # Fallback or error handling
+        return podcast_script, None # Or re-raise the error after logging
 
 
 def create_research_report(topic, search_text, video_text, search_sources_text, video_url, configuration=None):

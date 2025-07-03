@@ -21,9 +21,12 @@ steps:
       - '--platform=managed'
       - '--allow-unauthenticated' # Allows public access; change if not desired
       - '--port=8080' # The port your application listens on, matching Dockerfile's PORT or CMD default
-      - '--set-env-vars=GEMINI_API_KEY=$$GEMINI_API_KEY' # Set environment variables
+      - '--set-env-vars=GEMINI_API_KEY=$$GEMINI_API_KEY,GCS_BUCKET_NAME=$_GCS_BUCKET_NAME' # Set environment variables
       # Add other environment variables as needed, e.g., --set-env-vars=KEY1=VALUE1,KEY2=VALUE2
       # Cloud Run automatically sets the PORT environment variable for your container
+      # Note: The Cloud Run service account (default: [PROJECT_NUMBER]-compute@developer.gserviceaccount.com or a user-specified one)
+      # will need 'Storage Object Creator' role on the GCS bucket specified by _GCS_BUCKET_NAME,
+      # and 'Service Account Token Creator' role on itself (or appropriate permissions) to generate signed URLs.
     id: Deploy
     secretEnv: ['GEMINI_API_KEY']
 
@@ -32,6 +35,8 @@ availableSecrets:
   secretManager:
   - versionName: projects/$PROJECT_ID/secrets/GEMINI_API_KEY/versions/latest
     env: 'GEMINI_API_KEY' # This makes it available as $$GEMINI_API_KEY
+  # User needs to define _GCS_BUCKET_NAME as a substitution variable,
+  # e.g., --substitutions=_GCS_BUCKET_NAME=your-bucket-name when running gcloud builds submit
 
 # Store images in Artifact Registry
 images:
