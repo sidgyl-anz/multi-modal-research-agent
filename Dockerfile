@@ -37,5 +37,8 @@ EXPOSE 8080
 # Cloud Run will set the PORT environment variable.
 # The --allow-blocking flag was present in the original README command.
 # --config langgraph.json explicitly points to the config.
+# Add src directory to PYTHONPATH so that the 'agent' module can be found
+ENV PYTHONPATH="/app/src:${PYTHONPATH}"
+
 # Call langgraph directly, assuming it's on PATH after system-wide installation.
 CMD ["sh", "-c", "langgraph dev --host 0.0.0.0 --port ${PORT:-8080} --config langgraph.json --allow-blocking"]
