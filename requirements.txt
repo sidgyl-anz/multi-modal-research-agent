@@ -1,0 +1,16 @@
+# Generated from pyproject.toml and specific needs for langgraph dev
+langgraph>=0.2.6
+langchain>=0.3.19
+langchain-google-genai
+python-dotenv>=1.0.1
+langgraph-sdk>=0.1.57
+langgraph-api # Explicitly listed, also a project dependency
+fastapi
+google-genai
+rich
+# Ensure langgraph-cli[inmem] is installed, which should bring its necessary dependencies.
+# The pyproject.toml lists langgraph-cli[inmem]>=0.1.71 in dev dependency group.
+# For the main app, we need the project's own code, which is handled by COPY src.
+# Here we list explicit packages that were in pyproject.toml's main dependencies
+# and add langgraph-cli[inmem] for the runtime server.
+langgraph-cli[inmem]>=0.1.71
