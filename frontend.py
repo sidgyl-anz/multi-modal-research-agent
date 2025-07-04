@@ -38,6 +38,11 @@ if st.button("🚀 Start Research & Generate Podcast"):
     elif not topic:
         st.error("Please enter a research topic.")
     else:
+        # --- DEBUG INFO ---
+        st.sidebar.subheader("Debug Info (Frontend)")
+        st.sidebar.text(f"Attempting API call to: {api_url_input}")
+        # --- END DEBUG INFO ---
+
         payload = {
             "input": {
                 "topic": topic
@@ -57,11 +62,28 @@ if st.button("🚀 Start Research & Generate Podcast"):
         # if configurable_config:
         #     payload["config"]["configurable"] = configurable_config
 
+        # --- DEBUG INFO ---
+        st.sidebar.write("Payload being sent:")
+        st.sidebar.json(payload)
+        # --- END DEBUG INFO ---
+
         try:
             with st.spinner("🔬 Performing research, synthesizing report, and generating podcast... This may take a minute or two."):
                 response = requests.post(api_url_input, json=payload, timeout=300) # 5 min timeout
 
             st.subheader("📈 API Response")
+
+            # --- DEBUG INFO ---
+            st.sidebar.subheader("Debug Info (API Response)")
+            st.sidebar.text(f"Status Code: {response.status_code}")
+            try:
+                st.sidebar.write("Full API Response JSON:")
+                st.sidebar.json(response.json())
+            except ValueError:
+                st.sidebar.write("Full API Response Text (not JSON):")
+                st.sidebar.text(response.text)
+            # --- END DEBUG INFO ---
+
             if response.status_code == 200:
                 response_data = response.json()
 
