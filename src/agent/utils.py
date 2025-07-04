@@ -10,7 +10,18 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Initialize client
-genai_client = Client(api_key=os.getenv("GEMINI_API_KEY"))
+gemini_api_key_value = os.getenv("GEMINI_API_KEY")
+
+# !!! WARNING: DEBUGGING CODE - REMOVE AFTER TESTING !!!
+# This will print the API key to your Cloud Run logs.
+# Ensure logs are private and remove this line once you've verified the key.
+if gemini_api_key_value:
+    print(f"DEBUG: GEMINI_API_KEY loaded. Length: {len(gemini_api_key_value)}, First 5 chars: {gemini_api_key_value[:5]}", flush=True)
+else:
+    print("DEBUG: GEMINI_API_KEY IS NOT SET or is empty!", flush=True)
+# !!! END OF DEBUGGING CODE !!!
+
+genai_client = Client(api_key=gemini_api_key_value)
 
 
 def display_gemini_response(response):
