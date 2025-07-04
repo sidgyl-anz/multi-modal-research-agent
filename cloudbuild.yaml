@@ -14,29 +14,24 @@ steps:
     id: 'Push API Backend'
     waitFor: ['Build API Backend']
 
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+ - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'Deploy API Backend'
-    secretEnv: ['GEMINI_API_KEY'] # Makes GEMINI_API_KEY available to the bash script
+    secretEnv: ['GEMINI_API_KEY']
     waitFor: ['Push API Backend']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        # Echo the value of GEMINI_API_KEY available in this bash environment
-        echo "DEBUG (cloudbuild.yaml): GEMINI_API_KEY from env. First 5: ${GEMINI_API_KEY:0:5}, Length: ${#GEMINI_API_KEY}"
-
-        # Construct the --set-env-vars string.
-        # ${GEMINI_API_KEY} will be expanded by this bash shell from its environment.
-        # $_GCS_BUCKET_NAME and $_REGION will be substituted by Cloud Build *before* this script runs.
+        echo "DEBUG (cloudbuild.yaml): GEMINI_API_KEY from env. First 5: $${GEMINI_API_KEY:0:5}, Length: $${#GEMINI_API_KEY}"
         gcloud run deploy multi-modal-researcher-api \
           --image=us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-deploy/multi-modal-researcher-api:$COMMIT_SHA \
           --region=$_REGION \
           --platform=managed \
           --allow-unauthenticated \
           --port=8080 \
-          --set-env-vars="GEMINI_API_KEY=${GEMINI_API_KEY},GCS_BUCKET_NAME=$_GCS_BUCKET_NAME"
+          --set-env-vars="GEMINI_API_KEY=$${GEMINI_API_KEY},GCS_BUCKET_NAME=$_GCS_BUCKET_NAME"
         # Note: API Service account needs GCS write and Service Account Token Creator roles.
-
+        
   # --- Streamlit Frontend Service ---
   - name: 'gcr.io/cloud-builders/docker'
     args: [
