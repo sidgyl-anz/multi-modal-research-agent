@@ -12,6 +12,9 @@ from langsmith import traceable
 @traceable(run_type="llm", name="Web Research", project_name="multi-modal-researcher")
 def search_research_node(state: ResearchState, config: RunnableConfig) -> dict:
     """Node that performs web search research on the topic"""
+    # --- DEBUG: Print received state ---
+    print(f"DEBUG (search_research_node): Received state: {state}", flush=True)
+    # --- END DEBUG ---
     configuration = Configuration.from_runnable_config(config)
     topic = state["topic"]
     
