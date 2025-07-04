@@ -13,8 +13,8 @@ steps:
     args: ['push', 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-deploy/multi-modal-researcher-api:$COMMIT_SHA']
     id: 'Push API Backend'
     waitFor: ['Build API Backend']
-
- - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'Deploy API Backend'
     secretEnv: ['GEMINI_API_KEY']
     waitFor: ['Push API Backend']
