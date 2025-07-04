@@ -25,7 +25,7 @@ steps:
       - '--platform=managed'
       - '--allow-unauthenticated'
       - '--port=8080'
-      - '--set-env-vars=GEMINI_API_KEY=$$GEMINI_API_KEY,GCS_BUCKET_NAME=$_GCS_BUCKET_NAME'
+      - '--set-env-vars=GEMINI_API_KEY=$GEMINI_API_KEY,GCS_BUCKET_NAME=$_GCS_BUCKET_NAME' # Changed $$ to $ for GEMINI_API_KEY
       # Note: API Service account needs GCS write and Service Account Token Creator roles.
     id: 'Deploy API Backend'
     secretEnv: ['GEMINI_API_KEY']
