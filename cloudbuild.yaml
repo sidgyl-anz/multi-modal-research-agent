@@ -30,6 +30,19 @@ steps:
     id: 'Deploy API Backend'
     secretEnv: ['GEMINI_API_KEY']
     waitFor: ['Push API Backend']
+    entrypoint: 'bash' # Changed to bash to allow multiple commands
+    args:
+      - '-c'
+      - |
+        echo "DEBUG (cloudbuild.yaml): GEMINI_API_KEY in build step env: First 5 chars: ${GEMINI_API_KEY:0:5}, Length: ${#GEMINI_API_KEY}"
+        gcloud run deploy multi-modal-researcher-api \
+          --image=us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-deploy/multi-modal-researcher-api:$COMMIT_SHA \
+          --region=us-central1 \
+          --platform=managed \
+          --allow-unauthenticated \
+          --port=8080 \
+          --set-env-vars=GEMINI_API_KEY=$GEMINI_API_KEY,GCS_BUCKET_NAME=$_GCS_BUCKET_NAME \
+          # Note: API Service account needs GCS write and Service Account Token Creator roles.
 
   # --- Streamlit Frontend Service ---
   - name: 'gcr.io/cloud-builders/docker'
