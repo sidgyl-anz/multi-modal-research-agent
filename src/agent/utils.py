@@ -11,6 +11,14 @@ load_dotenv()
 
 # Initialize client
 gemini_api_key_value = os.getenv("GEMINI_API_KEY")
+
+# !!! WARNING: DEBUGGING CODE - RE-ADDED - REMOVE AFTER TESTING !!!
+if gemini_api_key_value:
+    print(f"DEBUG (utils.py): GEMINI_API_KEY loaded. Length: {len(gemini_api_key_value)}, First 5 chars: {gemini_api_key_value[:5]}", flush=True)
+else:
+    print("DEBUG (utils.py): GEMINI_API_KEY IS NOT SET or is empty!", flush=True)
+# !!! END OF DEBUGGING CODE !!!
+
 genai_client = Client(api_key=gemini_api_key_value)
 
 
