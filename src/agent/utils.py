@@ -243,8 +243,8 @@ def create_research_report(topic, search_text, video_text, search_sources_text, 
     
     synthesis_text = synthesis_response.candidates[0].content.parts[0].text
     
-    # Step 2: Create markdown report
-    report = f"""# Research Report: {topic}
+    # Step 2: Create markdown report string
+    report_content = f"""# Research Report: {topic}
 
 ## Executive Summary
 
@@ -259,5 +259,39 @@ def create_research_report(topic, search_text, video_text, search_sources_text, 
 ---
 *Report generated using multi-modal AI research combining web search and video analysis*
 """
-    
-    return report, synthesis_text
+
+    # Step 3: Upload report to GCS
+    gcs_bucket_name = os.getenv("GCS_BUCKET_NAME")
+    if not gcs_bucket_name:
+        print("GCS_BUCKET_NAME environment variable not set. Skipping GCS upload for report.")
+        # In a real scenario, decide how to handle this. For now, returning content and None URL.
+        return report_content, synthesis_text # Or return None, synthesis_text if URL is mandatory
+
+    try:
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(gcs_bucket_name)
+
+        # Create a unique filename for the report
+        safe_topic = "".join(c for c in topic if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        report_filename = f"research_report_{safe_topic.replace(' ', '_')}.md"
+        blob_name = f"reports/{report_filename}"
+        blob = bucket.blob(blob_name)
+
+        # Upload the report content
+        blob.upload_from_string(report_content, content_type='text/markdown')
+        print(f"Uploaded report to gs://{gcs_bucket_name}/{blob_name}")
+
+        # Generate a signed URL for the blob, valid for 1 hour
+        expiration_time = datetime.timedelta(hours=1)
+        signed_url = blob.generate_signed_url(
+            version="v4",
+            expiration=expiration_time,
+            method="GET",
+        )
+        print(f"Generated signed URL for report: {signed_url}")
+
+        return signed_url, synthesis_text
+    except Exception as e:
+        print(f"Error during GCS upload or signed URL generation for report: {e}")
+        # Fallback or error handling
+        return report_content, synthesis_text # Or None, synthesis_text
