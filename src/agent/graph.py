@@ -112,6 +112,12 @@ def should_analyze_video(state: ResearchState) -> str:
     else:
         return "create_report"
 
+def should_create_podcast(state: ResearchState) -> str:
+    """Conditional edge to determine if podcast creation should be performed"""
+    if state.get("create_podcast", False): # Default to False if not set, though it should be
+        return "create_podcast"
+    else:
+        return END
 
 def create_research_graph() -> StateGraph:
     """Create and return the research workflow graph"""
@@ -141,7 +147,16 @@ def create_research_graph() -> StateGraph:
         }
     )
     graph.add_edge("analyze_video", "create_report")
-    graph.add_edge("create_report", "create_podcast")
+
+    # Conditional edge for podcast creation
+    graph.add_conditional_edges(
+        "create_report",
+        should_create_podcast,
+        {
+            "create_podcast": "create_podcast",
+            END: END # If no podcast, end here
+        }
+    )
     graph.add_edge("create_podcast", END)
     
     return graph
