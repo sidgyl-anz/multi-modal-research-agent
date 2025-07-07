@@ -56,34 +56,37 @@ async def send_research_email_background(
     # For now, this is just a print statement.
     # You'll need to integrate an email library like smtplib, sendgrid, etc.
     # and handle SMTP configurations.
-    # --- Actual Email Sending Logic ---
-    import smtplib
-    from email.mime.text import MIMEText
-    from email.mime.multipart import MIMEMultipart
+    # --- AWS SES Email Sending Logic ---
+    import boto3
+    from botocore.exceptions import ClientError
 
-    smtp_host = os.getenv("SMTP_HOST")
-    smtp_port_str = os.getenv("SMTP_PORT", "587")
-    smtp_username = os.getenv("SMTP_USERNAME")
-    smtp_password = os.getenv("SMTP_PASSWORD")
-    smtp_sender_email = os.getenv("SMTP_SENDER_EMAIL")
-    smtp_use_tls_str = os.getenv("SMTP_USE_TLS", "True").lower()
-    smtp_use_ssl_str = os.getenv("SMTP_USE_SSL", "False").lower()
+    aws_ses_region_name = os.getenv("AWS_SES_REGION_NAME")
+    aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID") # Can be None if using IAM roles
+    aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY") # Can be None if using IAM roles
+    aws_ses_sender_email = os.getenv("AWS_SES_SENDER_EMAIL")
 
-    if not all([smtp_host, smtp_port_str, smtp_username, smtp_password, smtp_sender_email]):
-        print("SMTP configuration is incomplete. Skipping email.")
-        # In a real app, you might want to log this more formally or raise an alert
+    # Conditional activation: Only proceed if essential SES config is present
+    if not all([aws_ses_region_name, aws_ses_sender_email]):
+        print("AWS SES configuration (Region or Sender Email) is incomplete. Skipping email.")
+        # If access keys are not provided, boto3 will attempt to use IAM roles or other credential sources.
+        # We only strictly require region and sender email to attempt initialization.
         return
 
     try:
-        smtp_port = int(smtp_port_str)
-        smtp_use_tls = smtp_use_tls_str in ("true", "1")
-        smtp_use_ssl = smtp_use_ssl_str in ("true", "1")
+        # Initialize Boto3 SES client
+        # If aws_access_key_id and aws_secret_access_key are None, boto3 will try to
+        # find credentials in environment variables, shared credential file, or IAM role.
+        if aws_access_key_id and aws_secret_access_key:
+            ses_client = boto3.client(
+                "ses",
+                region_name=aws_ses_region_name,
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
+            )
+        else: # Rely on IAM role or environment variables for credentials
+            ses_client = boto3.client("ses", region_name=aws_ses_region_name)
 
-        # Create the email
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"Your Research Results for: {topic}"
-        msg["From"] = smtp_sender_email
-        msg["To"] = recipient_email
+        subject = f"Your Research Results for: {topic}"
 
         text_content = f"""
         Hello,
@@ -111,25 +114,25 @@ async def send_research_email_background(
         </html>
         """
 
-        msg.attach(MIMEText(text_content, "plain"))
-        msg.attach(MIMEText(html_content, "html"))
+        ses_client.send_email(
+            Destination={"ToAddresses": [recipient_email]},
+            Message={
+                "Body": {
+                    "Html": {"Charset": "UTF-8", "Data": html_content},
+                    "Text": {"Charset": "UTF-8", "Data": text_content},
+                },
+                "Subject": {"Charset": "UTF-8", "Data": subject},
+            },
+            Source=aws_ses_sender_email,
+            # If you are using a configuration set, specify it here
+            # ConfigurationSetName='your-config-set-name'
+        )
+        print(f"Email sent successfully via AWS SES to {recipient_email} for topic '{topic}'")
 
-        if smtp_use_ssl:
-            server = smtplib.SMTP_SSL(smtp_host, smtp_port)
-        else:
-            server = smtplib.SMTP(smtp_host, smtp_port)
-
-        if smtp_use_tls and not smtp_use_ssl: # STARTTLS is not used if SSL is already active
-            server.starttls()
-
-        server.login(smtp_username, smtp_password)
-        server.sendmail(smtp_sender_email, recipient_email, msg.as_string())
-        server.quit()
-        print(f"Email sent successfully to {recipient_email} for topic '{topic}'")
-
+    except ClientError as e:
+        print(f"Failed to send email via AWS SES to {recipient_email} for topic '{topic}'. Error: {e.response['Error']['Message']}")
     except Exception as e:
-        print(f"Failed to send email to {recipient_email} for topic '{topic}'. Error: {e}")
-        # In a real app, consider more robust error handling/logging or retry mechanisms
+        print(f"An unexpected error occurred during AWS SES email sending for topic '{topic}'. Error: {e}")
 
 @app.post("/research/", response_model=ResearchResponse)
 async def run_research(request: ResearchRequest, background_tasks: BackgroundTasks):
