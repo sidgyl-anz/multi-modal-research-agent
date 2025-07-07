@@ -14,9 +14,9 @@ gemini_api_key_value = os.getenv("GEMINI_API_KEY")
 
 # !!! WARNING: DEBUGGING CODE - RE-ADDED - REMOVE AFTER TESTING !!!
 if gemini_api_key_value:
-    print(f"DEBUG (utils.py): GEMINI_API_KEY loaded. Length: {len(gemini_api_key_value)}, First 5 chars: {gemini_api_key_value[:5]}", flush=True)
+    print(f"DEBUG (utils.py - Initialization): GEMINI_API_KEY loaded. Length: {len(gemini_api_key_value)}, First 5 chars: {gemini_api_key_value[:5]}", flush=True)
 else:
-    print("DEBUG (utils.py): GEMINI_API_KEY IS NOT SET or is empty!", flush=True)
+    print("DEBUG (utils.py - Initialization): GEMINI_API_KEY IS NOT SET or is empty! Client initialization might fail or use default credentials if available.", flush=True)
 # !!! END OF DEBUGGING CODE !!!
 
 genai_client = Client(api_key=gemini_api_key_value)
@@ -87,6 +87,13 @@ def create_podcast_discussion(topic, search_text, video_text, search_sources_tex
         configuration = Configuration()
     
     # Step 1: Generate podcast script
+    # --- DEBUG: Runtime API Key Check ---
+    gemini_api_key_runtime_pd_script = os.getenv("GEMINI_API_KEY")
+    if gemini_api_key_runtime_pd_script:
+        print(f"DEBUG (create_podcast_discussion - Script Gen - Runtime): About to call Gemini. Key starts with: {gemini_api_key_runtime_pd_script[:5]}", flush=True)
+    else:
+        print("DEBUG (create_podcast_discussion - Script Gen - Runtime): GEMINI_API_KEY not found in env at runtime!", flush=True)
+    # --- END DEBUG ---
     script_prompt = f"""
     Create a natural, engaging podcast conversation between Dr. Sarah (research expert) and Mike (curious interviewer) about "{topic}".
     
@@ -123,6 +130,13 @@ def create_podcast_discussion(topic, search_text, video_text, search_sources_tex
     podcast_script = script_response.candidates[0].content.parts[0].text
     
     # Step 2: Generate TTS audio
+    # --- DEBUG: Runtime API Key Check ---
+    gemini_api_key_runtime_pd_tts = os.getenv("GEMINI_API_KEY")
+    if gemini_api_key_runtime_pd_tts:
+        print(f"DEBUG (create_podcast_discussion - TTS Gen - Runtime): About to call Gemini for TTS. Key starts with: {gemini_api_key_runtime_pd_tts[:5]}", flush=True)
+    else:
+        print("DEBUG (create_podcast_discussion - TTS Gen - Runtime): GEMINI_API_KEY not found in env at runtime for TTS!", flush=True)
+    # --- END DEBUG ---
     tts_prompt = f"TTS the following conversation between Mike and Dr. Sarah:\n{podcast_script}"
     
     response = genai_client.models.generate_content(
@@ -213,8 +227,15 @@ def create_research_report(topic, search_text, video_text, search_sources_text, 
     if configuration is None:
         from agent.configuration import Configuration
         configuration = Configuration()
-    
+
     # Step 1: Create synthesis using Gemini
+    # --- DEBUG: Runtime API Key Check ---
+    gemini_api_key_runtime_report = os.getenv("GEMINI_API_KEY")
+    if gemini_api_key_runtime_report:
+        print(f"DEBUG (create_research_report - Synthesis - Runtime): About to call Gemini. Key starts with: {gemini_api_key_runtime_report[:5]}", flush=True)
+    else:
+        print("DEBUG (create_research_report - Synthesis - Runtime): GEMINI_API_KEY not found in env at runtime!", flush=True)
+    # --- END DEBUG ---
     synthesis_prompt = f"""
     You are tasked with producing a high-quality academic literature review on the topic of "{topic}".
     Your review should be based *solely* on the information provided from the 'SEARCH RESULTS' and 'VIDEO CONTENT' sections below.

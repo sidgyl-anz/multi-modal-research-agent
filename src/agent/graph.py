@@ -1,5 +1,6 @@
 """LangGraph implementation of the research and podcast generation workflow"""
 
+import os # Added for runtime debug
 from langgraph.graph import StateGraph, START, END
 from langchain_core.runnables import RunnableConfig
 from google.genai import types
@@ -17,6 +18,14 @@ def search_research_node(state: ResearchState, config: RunnableConfig) -> dict:
     # --- END DEBUG ---
     configuration = Configuration.from_runnable_config(config)
     topic = state["topic"]
+
+    # --- DEBUG: Runtime API Key Check ---
+    gemini_api_key_runtime = os.getenv("GEMINI_API_KEY")
+    if gemini_api_key_runtime:
+        print(f"DEBUG (search_research_node - Runtime): About to call Gemini. Key starts with: {gemini_api_key_runtime[:5]}", flush=True)
+    else:
+        print("DEBUG (search_research_node - Runtime): GEMINI_API_KEY not found in env at runtime!", flush=True)
+    # --- END DEBUG ---
     
     search_response = genai_client.models.generate_content(
         model=configuration.search_model,
