@@ -5,10 +5,6 @@ langchain-google-genai
 python-dotenv>=1.0.1
 langgraph-sdk>=0.1.57
 langgraph-api
-fastapi
-uvicorn[standard] # For serving FastAPI applications
-email-validator # For Pydantic EmailStr validation
-boto3 # AWS SDK for Python, for SES
 google-genai
 rich
 google-cloud-storage>=2.0.0
