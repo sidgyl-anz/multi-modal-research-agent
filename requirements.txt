@@ -6,6 +6,7 @@ python-dotenv>=1.0.1
 langgraph-sdk>=0.1.57
 langgraph-api
 fastapi
+uvicorn[standard] # For serving FastAPI applications
 google-genai
 rich
 google-cloud-storage>=2.0.0
