@@ -216,21 +216,55 @@ def create_research_report(topic, search_text, video_text, search_sources_text, 
     
     # Step 1: Create synthesis using Gemini
     synthesis_prompt = f"""
-    You are a research analyst. I have gathered information about "{topic}" from two sources:
-    
+    You are tasked with producing a high-quality academic literature review on the topic of "{topic}".
+    Your review should be based *solely* on the information provided from the 'SEARCH RESULTS' and 'VIDEO CONTENT' sections below.
+    Do not invent external information or sources.
+
+    The literature review should be structured, analytical, and comprehensive. Please adhere to the following guidelines:
+
+    1.  **Title:** Start with a clear, descriptive title for the literature review. (e.g., "A Literature Review on {topic}")
+
+    2.  **Introduction (1-2 paragraphs):**
+        *   Briefly introduce the topic of "{topic}".
+        *   State the purpose and scope of this literature review (i.e., to synthesize and analyze the provided information).
+        *   Outline the main themes or areas that will be covered in the review.
+
+    3.  **Thematic Analysis / Key Concepts (Multiple Paragraphs, organize by themes):**
+        *   Identify the major themes, concepts, findings, or arguments presented in the 'SEARCH RESULTS' and 'VIDEO CONTENT'.
+        *   For each theme/concept:
+            *   Provide a detailed explanation and synthesis of the information.
+            *   Critically analyze the information: discuss its significance, compare and contrast different points if they exist in the provided materials.
+            *   Clearly indicate which insights come from the search results versus the video content, if discernible and relevant.
+        *   Ensure a logical flow between themes. Use transition sentences to connect ideas.
+
+    4.  **Discussion (1-2 paragraphs):**
+        *   Provide an overall discussion of the topic based on the synthesized information.
+        *   Highlight any significant patterns, trends, or consistencies you observed in the provided materials.
+        *   If the provided materials suggest any limitations, gaps, or areas for further inquiry (based *only* on what's given), mention them. Do not speculate beyond the provided text.
+
+    5.  **Conclusion (1 paragraph):**
+        *   Summarize the main findings of your literature review.
+        *   Reiterate the key insights derived from the provided 'SEARCH RESULTS' and 'VIDEO CONTENT'.
+        *   Offer a final concluding thought on the topic of "{topic}" based on the review.
+
+    6.  **Tone and Style:**
+        *   Maintain a formal, objective, and academic tone throughout the review.
+        *   Use precise language. Avoid jargon where possible, or explain it if necessary (based on provided content).
+        *   Ensure clarity, coherence, and logical organization.
+
+    7.  **Length and Depth:**
+        *   Aim for a comprehensive and in-depth review. The length should be dictated by the depth of analysis the provided materials allow, rather than a specific word or paragraph count, but should be substantially more detailed than a brief summary. Strive for at least 6-8 well-developed paragraphs, or more if the content supports it.
+
+    **INPUT MATERIALS:**
+
     SEARCH RESULTS:
     {search_text}
-    
+
     VIDEO CONTENT:
     {video_text}
-    
-    Please create a comprehensive synthesis that:
-    1. Identifies key themes and insights from both sources
-    2. Highlights any complementary or contrasting perspectives
-    3. Provides an overall analysis of the topic based on this multi-modal research
-    4. Keep it concise but thorough (3-4 paragraphs)
-    
-    Focus on creating a coherent narrative that brings together the best insights from both sources.
+
+    ---
+    Begin the literature review now, starting with the title.
     """
     
     synthesis_response = genai_client.models.generate_content(
