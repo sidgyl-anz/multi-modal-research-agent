@@ -40,7 +40,5 @@ EXPOSE 8080
 # Add src directory to PYTHONPATH so that the 'agent' module can be found
 ENV PYTHONPATH="/app/src:${PYTHONPATH}"
 
-# Command to run the FastAPI application using Uvicorn.
-# Uvicorn will listen on the port specified by the PORT environment variable,
-# which is automatically set by Cloud Run. Defaults to 8080 if PORT is not set.
-CMD ["sh", "-c", "uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+# Call langgraph directly, assuming it's on PATH after system-wide installation.
+CMD ["sh", "-c", "langgraph dev --host 0.0.0.0 --port ${PORT:-8080} --config langgraph.json --allow-blocking"]
