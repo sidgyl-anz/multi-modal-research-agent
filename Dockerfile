@@ -25,7 +25,8 @@ RUN uv pip install --system -r requirements.txt
 # Copy .env.example to .env
 # In a production Cloud Run environment, environment variables should be set directly
 # in the service configuration rather than relying on .env files for secrets.
-COPY .env.example .env
+# DO NOT COPY .env.example to .env in production Cloud Run environments.
+# Environment variables should be set directly in the Cloud Run service configuration.
 
 # Cloud Run sets the PORT environment variable, so we don't need to EXPOSE it here,
 # but it's good practice for documenting which port the application intends to use.
