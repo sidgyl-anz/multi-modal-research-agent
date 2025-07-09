@@ -503,16 +503,30 @@ def parse_leads_from_gemini_response(gemini_response: Any) -> List[Dict]:
 
     raw_text = raw_text.strip()
 
-    # Attempt to extract JSON from markdown code block if present
-    if raw_text.startswith("```json"):
-        json_block_start = raw_text.find("```json") + 7 # Length of "```json\n"
-        json_block_end = raw_text.rfind("```")
-        if json_block_start != -1 and json_block_end != -1 and json_block_end > json_block_start :
-            json_str = raw_text[json_block_start:json_block_end].strip()
-        else: # Fallback if markdown block is malformed but starts with ```json
-            json_str = raw_text.replace("```json", "").replace("```", "").strip()
-    else:
-        json_str = raw_text
+    json_str = raw_text # Default to trying to parse the whole raw_text
+
+    # Try to find and extract a JSON markdown block if present
+    block_start_marker = "```json"
+    block_end_marker = "```"
+
+    start_index = raw_text.find(block_start_marker)
+    if start_index != -1:
+        # Found the start of a JSON block
+        content_start_index = start_index + len(block_start_marker)
+        # Handle optional newline after ```json
+        if content_start_index < len(raw_text) and raw_text[content_start_index] == '\n':
+            content_start_index += 1
+
+        end_index = raw_text.find(block_end_marker, content_start_index)
+        if end_index != -1:
+            # Found a complete block
+            json_str_candidate = raw_text[content_start_index:end_index].strip()
+            # Basic validation: if it looks like JSON, use it. Otherwise, stick with raw_text.
+            if (json_str_candidate.startswith("[") and json_str_candidate.endswith("]")) or \
+               (json_str_candidate.startswith("{") and json_str_candidate.endswith("}")):
+                json_str = json_str_candidate
+            # else: malformed block or content doesn't look like JSON, will try to parse original json_str (raw_text)
+        # else: no proper end marker found after start marker, try to parse original json_str (raw_text)
 
     try:
         leads_data = json.loads(json_str)
