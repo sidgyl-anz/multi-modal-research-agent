@@ -1,15 +1,16 @@
-# Multi-Modal Research Agent
+# Multi-Modal Researcher
 
-This project is a versatile research and podcast generation workflow using LangGraph and Google's Gemini models. It  supports two main research approaches:
+This project is a versatile research and podcast generation workflow using LangGraph and Google's Gemini models. It now supports two main research approaches:
 1.  **Topic-Only Research**: Performs web research on a given topic, optionally analyzes a YouTube video, synthesizes insights into a report, and can generate a podcast.
 2.  **Topic, Company, and Leads Research**: Extends topic research to a specific company context, identifies key personnel (leads) within that company using both Gemini's advanced capabilities (including identifying potential buyers) and targeted Google Custom Search for LinkedIn profiles, then generates a comprehensive report and optional podcast.
 
-The system leverages Gemini's native capabilities:
+The system leverages several of Gemini's native capabilities:
 
 - 🎥 [Video understanding and native YouTube tool](https://developers.googleblog.com/en/gemini-2-5-video-understanding/): Integrated processing of YouTube videos
 - 🔍 [Google search tool](https://developers.googleblog.com/en/gemini-2-5-thinking-model-updates/): Native Google Search tool integration with real-time web results
 - 🎙️ [Multi-speaker text-to-speech](https://ai.google.dev/gemini-api/docs/speech-generation): Generate natural conversations with distinct speaker voices
 
+![mutli-modal-researcher](https://github.com/user-attachments/assets/85067de9-3c36-47b8-ae06-29b00746036f)
 
 ## Quick Start
 
@@ -22,7 +23,10 @@ The system leverages Gemini's native capabilities:
 ### Setup
 
 1. **Clone and navigate to the project**:
-
+```bash
+git clone https://github.com/langchain-ai/multi-modal-researcher
+cd mutli-modal-researcher
+```
 
 2. **Set up environment variables**:
 ```bash
@@ -100,7 +104,16 @@ LangGraph will open in your browser.
    }
    ```
 
+<img width="1604" alt="Screenshot 2025-06-24 at 5 13 31 PM" src="https://github.com/user-attachments/assets/6407e802-8932-4cfb-bdf9-5af96050ee1f" />
+*(Note: The screenshot shows the older UI; input will now be a single JSON object as described above.)*
 
+Result:
+
+[🔍 See the example report](./example/report/karpathy_os.md)
+
+[▶️ Download the example podcast](./example/audio/karpathy_os.wav)
+
+## Accessing the Agent via API
 
 When the agent is served (e.g., using `langgraph dev`), it can be accessed via HTTP API endpoints. This is useful for programmatic interaction, such as from a separate frontend application (e.g., a React app).
 
@@ -190,7 +203,6 @@ The primary endpoint for running the research graph is:
 
 If your React frontend is served from a different domain or port than the LangGraph API (e.g., React app on `http://localhost:3000` and API on `http://localhost:2024`), you will need to enable CORS on the LangGraph API server.
 When using `langgraph dev`, you can often pass flags like `--cors-origins \"http://localhost:3000\"` (or your React app's URL). For production deployments, CORS policies would be configured at the API gateway or server level.
-
 
 ## Architecture
 
@@ -322,3 +334,7 @@ Core dependencies managed via `pyproject.toml`:
 - `langchain>=0.3.19` - LangChain integrations
 - `rich` - Enhanced terminal output
 - `python-dotenv` - Environment management
+
+## License
+
+MIT License - see LICENSE file for details.

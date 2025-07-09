@@ -196,6 +196,7 @@ def create_report_node(state: ResearchState, config: RunnableConfig) -> dict:
     company_specific_topic_research_text = state.get("company_specific_topic_research_text") # From company_topic_research_node
     company_info_text = state.get("company_info_text") # From company_topic_research_node
     identified_leads_data = state.get("identified_leads_data") # From identify_leads_node
+    linkedin_cse_contacts = state.get("linkedin_cse_contacts") # New: Get CSE contacts from state
 
     # Call the modified utility function from utils.py
     # It now handles the different research approaches internally.
@@ -210,6 +211,7 @@ def create_report_node(state: ResearchState, config: RunnableConfig) -> dict:
         company_specific_topic_research_text=company_specific_topic_research_text,
         company_info_text=company_info_text,
         identified_leads_data=identified_leads_data,
+        linkedin_cse_contacts=linkedin_cse_contacts, # New: Pass CSE contacts to report function
         configuration=configuration
     )
     
