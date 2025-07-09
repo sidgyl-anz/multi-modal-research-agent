@@ -1,6 +1,10 @@
 # Multi-Modal Researcher
 
-This project is a simple research and podcast generation workflow that uses LangGraph with the unique capabilities of Google's Gemini 2.5 model family. It combines three useful features of the Gemini 2.5 model family. You can pass a research topic and, optionally, a YouTube video URL. The system will then perform research on the topic using search, analyze the video, combine the insights, and generate a report with citations as well as a short podcast on the topic for you. It takes advantage of a few of Gemini's native capabilities:
+This project is a versatile research and podcast generation workflow using LangGraph and Google's Gemini models. It now supports two main research approaches:
+1.  **Topic-Only Research**: Performs web research on a given topic, optionally analyzes a YouTube video, synthesizes insights into a report, and can generate a podcast.
+2.  **Topic, Company, and Leads Research**: Extends topic research to a specific company context, identifies key personnel (leads) within that company using both Gemini's advanced capabilities (including identifying potential buyers) and targeted Google Custom Search for LinkedIn profiles, then generates a comprehensive report and optional podcast.
+
+The system leverages several of Gemini's native capabilities:
 
 - 🎥 [Video understanding and native YouTube tool](https://developers.googleblog.com/en/gemini-2-5-video-understanding/): Integrated processing of YouTube videos
 - 🔍 [Google search tool](https://developers.googleblog.com/en/gemini-2-5-thinking-model-updates/): Native Google Search tool integration with real-time web results
@@ -31,7 +35,16 @@ cp .env.example .env
 Edit `.env` and [add your Google Gemini API key](https://ai.google.dev/gemini-api/docs/api-key):
 ```bash
 GEMINI_API_KEY=your_api_key_here
+
+# Optional: For "Topic Company Leads" research using Google Custom Search Engine for LinkedIn profiles
+GOOGLE_API_KEY_FOR_CSE=your_google_api_key_for_cse
+GOOGLE_CSE_ID=your_google_cse_id
+
+# Optional: For GCS upload of reports and podcasts (if not using local storage)
+# GCS_BUCKET_NAME=your-gcs-bucket-name
+# GOOGLE_APPLICATION_CREDENTIALS=/path/to/your/gcs_service_account_key.json
 ```
+Ensure the environment variables are loaded into your session.
 
 3. **Run the development server**:
 
@@ -56,13 +69,43 @@ LangGraph will open in your browser.
 - 📚 API Docs: http://127.0.0.1:2024/docs
 ```
 
-5. Pass a `topic` and optionally a `video_url`.
+5. **Provide Input to the Agent**:
+   The agent now accepts a JSON input with the following structure:
+   ```json
+   {
+     "topic": "Your research topic (e.g., AI in healthcare)",
+     "research_approach": "\"Topic Only\" OR \"Topic Company Leads\"",
+     "company_name": "Name of the company (required if research_approach is 'Topic Company Leads')",
+     "title_areas": ["List of job titles/areas to search for (e.g., 'VP of Engineering', 'Data Scientist'), required for 'Topic Company Leads'"],
+     "video_url": "Optional YouTube URL for video analysis",
+     "create_podcast": "true OR false (to generate a podcast)"
+   }
+   ```
 
-Example:
-* `topic`: Give me an overview of the idea that LLMs are like a new kind of operating system.
-* `video_url`: https://youtu.be/LCEmiRjPEtQ?si=raeMN2Roy5pESNG2
+   **Example 1: Topic Only Research**
+   ```json
+   {
+     "topic": "The impact of quantum computing on cryptography",
+     "research_approach": "Topic Only",
+     "video_url": null,
+     "create_podcast": false
+   }
+   ```
+
+   **Example 2: Topic, Company, and Leads Research**
+   ```json
+   {
+     "topic": "Application of generative AI in enterprise search solutions",
+     "research_approach": "Topic Company Leads",
+     "company_name": "Glean",
+     "title_areas": ["Head of AI", "Chief Technology Officer", "Product Manager AI"],
+     "video_url": "https://www.youtube.com/watch?v=your_video_id_here", // Optional
+     "create_podcast": true
+   }
+   ```
 
 <img width="1604" alt="Screenshot 2025-06-24 at 5 13 31 PM" src="https://github.com/user-attachments/assets/6407e802-8932-4cfb-bdf9-5af96050ee1f" />
+*(Note: The screenshot shows the older UI; input will now be a single JSON object as described above.)*
 
 Result:
 
@@ -74,41 +117,65 @@ Result:
 
 The system implements a LangGraph workflow with the following nodes:
 
-1. **Search Research Node**: Performs web search using Gemini's Google Search integration
-2. **Analyze Video Node**: Analyzes YouTube videos when provided (conditional)
-3. **Create Report Node**: Synthesizes findings into a comprehensive markdown report
-4. **Create Podcast Node**: Generates a 2-speaker podcast discussion with TTS audio
+The system implements a LangGraph workflow with conditional paths based on `research_approach`.
 
-### Workflow
+**Core Nodes:**
+1.  **`search_research_node`**: (Topic Only path) Performs general web research on the topic.
+2.  **`company_topic_research_node`**: (Topic Company Leads path) Researches the topic in the context of the specified company and gathers general company information.
+3.  **`identify_leads_node`**: (Topic Company Leads path) Uses Gemini to identify detailed leads (name, title, department, relevance, named buyers) at the company.
+4.  **`search_linkedin_via_cse_node`**: (Topic Company Leads path) Uses Google Custom Search Engine to find LinkedIn profiles matching the company and title areas.
+5.  **`analyze_video_node`**: (Optional, both paths) Analyzes YouTube video content if a URL is provided.
+6.  **`create_report_node`**: Synthesizes all gathered information (from topic research, company research, lead identification, CSE search, video analysis) into a comprehensive markdown report.
+7.  **`create_podcast_node`**: (Optional, both paths) Generates a 2-speaker podcast discussion based on the synthesized research.
 
+### Workflow Diagram (Simplified)
+
+```mermaid
+graph TD
+    A[START] --> B{should_perform_company_research};
+    B -- Topic Only --> C[search_research_node];
+    B -- Topic Company Leads --> D[company_topic_research_node];
+    D --> E[identify_leads_node];
+    E --> F[search_linkedin_via_cse_node];
+    C --> G{should_analyze_video};
+    F --> G;
+    G -- Yes --> H[analyze_video_node];
+    G -- No --> I[create_report_node];
+    H --> I;
+    I --> J{should_create_podcast};
+    J -- Yes --> K[create_podcast_node];
+    J -- No --> L[END];
+    K --> L;
 ```
-START → search_research → [analyze_video?] → create_report → create_podcast → END
-```
-
-The workflow conditionally includes video analysis if a YouTube URL is provided, otherwise proceeds directly to report generation.
 
 ### Output
 
-The system generates:
+The system's output varies based on the research approach and optional steps:
 
-- **Research Report**: Comprehensive markdown report with executive summary and sources
-- **Podcast Script**: Natural dialogue between Dr. Sarah (expert) and Mike (interviewer)  
-- **Audio File**: Multi-speaker TTS audio file (`research_podcast_*.wav`)
+-   **`report`**: A comprehensive markdown string.
+    -   For "Topic Only": Contains synthesized information from web search and optional video analysis.
+    -   For "Topic Company Leads": Contains synthesized information from company-specific topic research, general company info, detailed leads from Gemini (including named buyers), LinkedIn contacts from CSE, and optional video analysis.
+-   **`identified_leads`**: (Optional, for "Topic Company Leads" approach) A list of dictionaries, where each dictionary details a lead found by Gemini (name, title, department, relevance, LinkedIn URL, and associated named buyers).
+-   **`linkedin_cse_contacts`**: (Optional, for "Topic Company Leads" approach) A list of dictionaries, where each dictionary contains `title`, `link`, and `snippet` for LinkedIn profiles found via Google CSE.
+-   **`podcast_script`**: (Optional) Text script of the generated podcast.
+-   **`podcast_url`**: (Optional) URL to the generated podcast audio file (if GCS is configured) or local filename.
 
 ## Configuration
 
 The system supports runtime configuration through the `Configuration` class:
 
 ### Model Settings
-- `search_model`: Model for web search (default: "gemini-2.5-flash")
+- `search_model`: Model for general web search and company/topic research (default: "gemini-2.5-flash")
 - `synthesis_model`: Model for report synthesis (default: "gemini-2.5-flash")
 - `video_model`: Model for video analysis (default: "gemini-2.5-flash")
 - `tts_model`: Model for text-to-speech (default: "gemini-2.5-flash-preview-tts")
+- `lead_identification_model`: Model for detailed lead identification via Gemini (default: "gemini-1.5-pro-latest")
 
 ### Temperature Settings
-- `search_temperature`: Factual search queries (default: 0.0)
-- `synthesis_temperature`: Balanced synthesis (default: 0.3)
-- `podcast_script_temperature`: Creative dialogue (default: 0.4)
+- `search_temperature`: For web search queries (default: 0.0)
+- `synthesis_temperature`: For report synthesis (default: 0.3)
+- `podcast_script_temperature`: For creative podcast dialogue (default: 0.4)
+- `lead_identification_temperature`: For structured lead data extraction (default: 0.2)
 
 ### TTS Settings
 - `mike_voice`: Voice for interviewer (default: "Kore")
@@ -130,18 +197,34 @@ The system supports runtime configuration through the `Configuration` class:
 
 ## Key Components
 
-### State Management
+### State Management (`src/agent/state.py`)
 
-- **ResearchStateInput**: Input schema (topic, optional video_url)
-- **ResearchStateOutput**: Output schema (report, podcast_script, podcast_filename)
-- **ResearchState**: Complete state including intermediate results
+-   **`ResearchStateInput`**: Defines the input to the workflow. Key fields include:
+    -   `topic: str` (Mandatory)
+    -   `research_approach: Literal["Topic Only", "Topic Company Leads"]` (Mandatory)
+    -   `company_name: Optional[str]`
+    -   `title_areas: Optional[List[str]]`
+    -   `video_url: Optional[str]`
+    -   `create_podcast: bool`
+-   **`ResearchStateOutput`**: Defines the final output. Key fields include:
+    -   `report: Optional[str]`
+    -   `identified_leads: Optional[List[Dict]]` (Detailed leads from Gemini)
+    -   `linkedin_cse_contacts: Optional[List[Dict]]` (Contacts from CSE LinkedIn search)
+    -   `podcast_script: Optional[str]`
+    -   `podcast_url: Optional[str]`
+-   **`ResearchState`**: The complete internal state of the graph, including all inputs, intermediate results (e.g., `search_text`, `company_specific_topic_research_text`, `identified_leads_data`), and final outputs.
 
-### Utility Functions
+### Utility Functions (`src/agent/utils.py`)
 
-- **display_gemini_response()**: Processes Gemini responses with grounding metadata
-- **create_podcast_discussion()**: Generates scripted dialogue and TTS audio
-- **create_research_report()**: Synthesizes multi-modal research into reports
-- **wave_file()**: Saves audio data to WAV format
+-   **`display_gemini_response()`**: Processes and displays Gemini responses, including grounding metadata.
+-   **`create_podcast_discussion()`**: Generates a scripted podcast dialogue and TTS audio.
+-   **`create_research_report()`**: Synthesizes information from various research steps (topic, company, leads, video) into a comprehensive markdown report. Handles different content based on `research_approach`.
+-   **`generate_company_topic_research_prompt()`**: Creates the prompt for researching a topic in relation to a specific company.
+-   **`generate_lead_identification_prompt()`**: Creates the prompt for Gemini to identify detailed leads, including departments and named buyers.
+-   **`parse_leads_from_gemini_response()`**: Parses structured JSON output from Gemini for lead data.
+-   **`build_linkedin_cse_query()`**: Constructs a Google Custom Search query string for finding LinkedIn profiles.
+-   **`fetch_linkedin_contacts_via_cse()`**: Executes a Google Custom Search API call and parses the results for LinkedIn contacts.
+-   **`wave_file()`**: Saves audio data to WAV format.
 
 ## Deployment
 
