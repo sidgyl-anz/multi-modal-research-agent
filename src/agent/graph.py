@@ -137,12 +137,11 @@ def identify_leads_node(state: ResearchState, config: RunnableConfig) -> dict:
     response = genai_client.models.generate_content(
         model=configuration.lead_identification_model, # Use dedicated model
         contents=prompt,
-        tools=[types.Tool(google_search_retrieval=types.GoogleSearchRetrieval())], # Updated tool definition
-        generation_config=types.GenerationConfig(
-            temperature=configuration.lead_identification_temperature, # Use dedicated temp
-            # Consider requesting JSON output directly if model/API supports reliably:
-            # response_mime_type="application/json", # This should be part of GenerationConfig
-        )
+        config={ # Pass tools and temperature within the config dictionary
+            "tools": [types.Tool(google_search_retrieval=types.GoogleSearchRetrieval())],
+            "temperature": configuration.lead_identification_temperature,
+            # "response_mime_type": "application/json", # If needed for structured output
+        }
     )
 
     identified_leads = parse_leads_from_gemini_response(response)
