@@ -1,4 +1,4 @@
-# Multi-Modal Researcher
+# Multi-Modal Research Agent
 
 This project is a versatile research and podcast generation workflow using LangGraph and Google's Gemini models. It  supports two main research approaches:
 1.  **Topic-Only Research**: Performs web research on a given topic, optionally analyzes a YouTube video, synthesizes insights into a report, and can generate a podcast.
@@ -230,7 +230,3 @@ Core dependencies managed via `pyproject.toml`:
 - `langchain>=0.3.19` - LangChain integrations
 - `rich` - Enhanced terminal output
 - `python-dotenv` - Environment management
-
-## License
-
-MIT License - see LICENSE file for details.
