@@ -1,6 +1,8 @@
 import os
 import wave
+import json # Import json module
 import datetime # For signed URL expiration
+from typing import Optional, List, Dict, Any # Added for type hints
 from google.genai import Client, types
 from google.cloud import storage # For GCS operations
 from rich.console import Console
@@ -83,7 +85,7 @@ def create_podcast_discussion(topic, search_text, video_text, search_sources_tex
     
     # Use default values if no configuration provided
     if configuration is None:
-        from agent.configuration import Configuration
+        from .configuration import Configuration # Relative import
         configuration = Configuration()
     
     # Step 1: Generate podcast script
@@ -220,15 +222,93 @@ def create_podcast_discussion(topic, search_text, video_text, search_sources_tex
         return podcast_script, None # Or re-raise the error after logging
 
 
-def create_research_report(topic, search_text, video_text, search_sources_text, video_url, configuration=None):
-    """Create a comprehensive research report by synthesizing search and video content"""
+def create_research_report(
+    topic: str,
+    research_approach: str, # New parameter: "Topic Only" or "Topic Company Leads"
+    search_text: Optional[str],
+    video_text: Optional[str],
+    search_sources_text: Optional[str],
+    video_url: Optional[str],
+    company_name: Optional[str] = None,
+    company_specific_topic_research_text: Optional[str] = None,
+    company_info_text: Optional[str] = None,
+    identified_leads_data: Optional[List[Dict]] = None,
+    configuration=None
+):
+    """Create a comprehensive research report by synthesizing available content based on research approach."""
     
-    # Use default values if no configuration provided
     if configuration is None:
-        from agent.configuration import Configuration
+        from .configuration import Configuration # Relative import
         configuration = Configuration()
 
-    # Step 1: Create synthesis using Gemini
+    # Step 1: Construct the synthesis prompt based on research_approach
+    prompt_title = f"Research Synthesis on '{topic}'"
+    if research_approach == "Topic Company Leads" and company_name:
+        prompt_title += f" in Relation to {company_name}"
+
+    input_materials_sections = []
+    if search_text: # This would be general topic search for "Topic Only"
+        input_materials_sections.append(f"GENERAL TOPIC SEARCH RESULTS:\n{search_text}\n")
+    if company_specific_topic_research_text:
+        input_materials_sections.append(f"COMPANY-SPECIFIC TOPIC RESEARCH ({company_name}):\n{company_specific_topic_research_text}\n")
+    if company_info_text:
+        input_materials_sections.append(f"GENERAL COMPANY INFORMATION ({company_name}):\n{company_info_text}\n")
+    if video_text:
+        input_materials_sections.append(f"VIDEO CONTENT INSIGHTS:\n{video_text}\n")
+
+    if identified_leads_data:
+        leads_summary_for_prompt = []
+        for idx, lead in enumerate(identified_leads_data[:5]): # Show details for up to 5 leads in prompt
+            lead_str = f"  Lead {idx+1}: {lead.get('lead_name', 'N/A')} ({lead.get('lead_title', 'N/A')})\n"
+            lead_str += f"    Department: {lead.get('lead_department', 'N/A')}\n"
+            lead_str += f"    Relevance: {lead.get('summary_of_relevance', 'N/A')}\n"
+            if lead.get('named_buyers'):
+                lead_str += f"    Named Buyers:\n"
+                for buyer_idx, buyer in enumerate(lead.get('named_buyers', [])):
+                    lead_str += f"      - {buyer.get('buyer_name', 'N/A')} ({buyer.get('buyer_title', 'N/A')}): {buyer.get('buyer_rationale', 'N/A')}\n"
+            leads_summary_for_prompt.append(lead_str)
+        input_materials_sections.append(f"IDENTIFIED LEADS AT {company_name}:\n" + "\n".join(leads_summary_for_prompt) + "\n")
+
+    all_input_text = "\n---\n".join(input_materials_sections)
+
+    synthesis_prompt = f"""
+You are tasked with producing a high-quality, comprehensive research report.
+The report should synthesize information from the various INPUT MATERIALS provided below.
+Do not invent external information or sources.
+
+Report Title: {prompt_title}
+
+Please structure your report as follows:
+
+1.  **Introduction (1-2 paragraphs):**
+    *   Briefly introduce the main subject: "{topic}".
+    *   If applicable (i.e., if company information is provided), introduce the company "{company_name}" and its relevance to the topic.
+    *   State the purpose of this report (to synthesize and analyze the provided input materials).
+
+2.  **Key Findings and Thematic Analysis (Multiple Paragraphs):**
+    *   Identify and discuss the major themes, concepts, and findings from the INPUT MATERIALS.
+    *   If company-specific research or general company information is present, integrate these insights smoothly.
+    *   If video content is present, incorporate its key takeaways.
+    *   If lead information is provided, briefly summarize the types of leads identified and their general relevance in a dedicated sub-section or integrated into the discussion of the company's role. Do not just list them; synthesize the findings.
+    *   Ensure a logical flow and use transition sentences.
+
+3.  **Discussion (1-2 paragraphs):**
+    *   Provide an overall discussion based on all synthesized information.
+    *   Highlight significant patterns, trends, or consistencies.
+    *   If the materials suggest any limitations or gaps (based *only* on what's given), mention them.
+
+4.  **Conclusion (1 paragraph):**
+    *   Summarize the main findings of the report.
+    *   Offer a final concluding thought.
+
+Tone and Style: Formal, objective, analytical, and clear.
+Length: Aim for a comprehensive review appropriate to the provided materials (e.g., 6-8 paragraphs or more).
+
+INPUT MATERIALS:
+{all_input_text}
+---
+Begin the report now, starting with the Introduction (the title is already defined above).
+"""
     # --- DEBUG: Runtime API Key Check ---
     gemini_api_key_runtime_report = os.getenv("GEMINI_API_KEY")
     if gemini_api_key_runtime_report:
@@ -236,84 +316,42 @@ def create_research_report(topic, search_text, video_text, search_sources_text, 
     else:
         print("DEBUG (create_research_report - Synthesis - Runtime): GEMINI_API_KEY not found in env at runtime!", flush=True)
     # --- END DEBUG ---
-    synthesis_prompt = f"""
-    You are tasked with producing a high-quality academic literature review on the topic of "{topic}".
-    Your review should be based *solely* on the information provided from the 'SEARCH RESULTS' and 'VIDEO CONTENT' sections below.
-    Do not invent external information or sources.
-
-    The literature review should be structured, analytical, and comprehensive. Please adhere to the following guidelines:
-
-    1.  **Title:** Start with a clear, descriptive title for the literature review. (e.g., "A Literature Review on {topic}")
-
-    2.  **Introduction (1-2 paragraphs):**
-        *   Briefly introduce the topic of "{topic}".
-        *   State the purpose and scope of this literature review (i.e., to synthesize and analyze the provided information).
-        *   Outline the main themes or areas that will be covered in the review.
-
-    3.  **Thematic Analysis / Key Concepts (Multiple Paragraphs, organize by themes):**
-        *   Identify the major themes, concepts, findings, or arguments presented in the 'SEARCH RESULTS' and 'VIDEO CONTENT'.
-        *   For each theme/concept:
-            *   Provide a detailed explanation and synthesis of the information.
-            *   Critically analyze the information: discuss its significance, compare and contrast different points if they exist in the provided materials.
-            *   Clearly indicate which insights come from the search results versus the video content, if discernible and relevant.
-        *   Ensure a logical flow between themes. Use transition sentences to connect ideas.
-
-    4.  **Discussion (1-2 paragraphs):**
-        *   Provide an overall discussion of the topic based on the synthesized information.
-        *   Highlight any significant patterns, trends, or consistencies you observed in the provided materials.
-        *   If the provided materials suggest any limitations, gaps, or areas for further inquiry (based *only* on what's given), mention them. Do not speculate beyond the provided text.
-
-    5.  **Conclusion (1 paragraph):**
-        *   Summarize the main findings of your literature review.
-        *   Reiterate the key insights derived from the provided 'SEARCH RESULTS' and 'VIDEO CONTENT'.
-        *   Offer a final concluding thought on the topic of "{topic}" based on the review.
-
-    6.  **Tone and Style:**
-        *   Maintain a formal, objective, and academic tone throughout the review.
-        *   Use precise language. Avoid jargon where possible, or explain it if necessary (based on provided content).
-        *   Ensure clarity, coherence, and logical organization.
-
-    7.  **Length and Depth:**
-        *   Aim for a comprehensive and in-depth review. The length should be dictated by the depth of analysis the provided materials allow, rather than a specific word or paragraph count, but should be substantially more detailed than a brief summary. Strive for at least 6-8 well-developed paragraphs, or more if the content supports it.
-
-    **INPUT MATERIALS:**
-
-    SEARCH RESULTS:
-    {search_text}
-
-    VIDEO CONTENT:
-    {video_text}
-
-    ---
-    Begin the literature review now, starting with the title.
-    """
-    
     synthesis_response = genai_client.models.generate_content(
         model=configuration.synthesis_model,
         contents=synthesis_prompt,
-        config={
-            "temperature": configuration.synthesis_temperature,
-        }
+        config={"temperature": configuration.synthesis_temperature}
     )
     
     synthesis_text = synthesis_response.candidates[0].content.parts[0].text
     
     # Step 2: Create markdown report string
-    report_content = f"""# Research Report: {topic}
+    report_sections = [f"# {prompt_title}\n\n{synthesis_text}"]
 
-## Executive Summary
+    if research_approach == "Topic Company Leads" and identified_leads_data:
+        leads_md_section = ["\n\n## Identified Leads Summary\n"]
+        if not identified_leads_data:
+            leads_md_section.append("No specific leads were identified or provided for this report section.")
+        else:
+            for i, lead in enumerate(identified_leads_data):
+                leads_md_section.append(f"### Lead {i+1}: {lead.get('lead_name', 'N/A')} - {lead.get('lead_title', 'N/A')}")
+                leads_md_section.append(f"-   **Department:** {lead.get('lead_department', 'N/A')}")
+                leads_md_section.append(f"-   **LinkedIn:** {lead.get('linkedin_url', 'N/A') if lead.get('linkedin_url') else 'Not available'}")
+                leads_md_section.append(f"-   **Relevance:** {lead.get('summary_of_relevance', 'N/A')}")
+                if lead.get('named_buyers'):
+                    leads_md_section.append("-   **Potential Named Buyers:**")
+                    for buyer in lead.get('named_buyers', []):
+                        leads_md_section.append(f"    -   {buyer.get('buyer_name', 'N/A')} ({buyer.get('buyer_title', 'N/A')}): {buyer.get('buyer_rationale', 'N/A')}")
+                leads_md_section.append("\n")
+        report_sections.append("\n".join(leads_md_section))
 
-{synthesis_text}
+    if video_url:
+        report_sections.append(f"\n\n## Video Source\n- **URL**: {video_url if video_url else 'Not provided'}")
 
-## Video Source
-- **URL**: {video_url}
+    if search_sources_text: # General search sources
+        report_sections.append(f"\n\n## Additional Research Sources\n{search_sources_text if search_sources_text else 'None available'}")
 
-## Additional Sources
-{search_sources_text}
-
----
-*Report generated using multi-modal AI research combining web search and video analysis*
-"""
+    report_sections.append("\n\n---\n*Report generated using multi-modal AI research.*")
+    report_content = "\n".join(report_sections)
 
     # Step 3: Upload report to GCS
     gcs_bucket_name = os.getenv("GCS_BUCKET_NAME")
@@ -350,3 +388,128 @@ def create_research_report(topic, search_text, video_text, search_sources_text, 
         print(f"Error during GCS upload or signed URL generation for report: {e}")
         # Fallback or error handling
         return report_content, synthesis_text # Or None, synthesis_text
+
+
+def generate_company_topic_research_prompt(topic: str, company_name: str) -> str:
+    """Generates a prompt to research a topic in the context of a specific company."""
+    return f"""
+Conduct detailed research on the topic "{topic}" specifically as it relates to the company "{company_name}".
+Additionally, gather general information about "{company_name}", including:
+- Its primary business, industry, and market position.
+- Key products, services, or initiatives relevant to "{topic}".
+- Any publicly available information about its organizational structure or key departments related to "{topic}".
+
+Provide a comprehensive overview based on publicly available information. Focus on factual data and established knowledge.
+Structure your response into two main sections:
+1.  **Topic Research in Company Context:** Detailed findings about "{topic}" pertaining to "{company_name}".
+2.  **General Company Information:** Overview of "{company_name}" relevant to the research.
+
+Please ensure the information is well-organized and clearly presented.
+"""
+
+def generate_lead_identification_prompt(company_name: str, title_areas: List[str], company_topic_context: str) -> str:
+    """
+    Generates a prompt for identifying leads, their departments, and named buyers.
+    """
+    titles_str = ", ".join(f"'{title}'" for title in title_areas)
+    prompt = f"""
+You are a specialized Lead Identification and Market Research AI.
+Your task is to identify up to 5 key individuals (leads) at the company "{company_name}" who match the specified title areas: {titles_str}.
+The research should be informed by the following context about the company's activities related to a specific topic:
+Context: "{company_topic_context[:1500]}" (Context is provided for background, focus on identifying people based on titles and company)
+
+For each of the (up to) 5 leads identified, provide the following information in a structured JSON format.
+The output should be a single JSON list, where each item is an object representing a lead:
+{{
+  "lead_name": "string (Full name of the lead)",
+  "lead_title": "string (Exact job title of the lead at {company_name})",
+  "lead_department": "string (Department the lead likely belongs to, e.g., 'Marketing', 'Engineering', 'Product Management')",
+  "linkedin_url": "string (Full LinkedIn profile URL if available, otherwise null)",
+  "summary_of_relevance": "string (Brief 1-2 sentence summary explaining why this person is a relevant lead based on their title and potential connection to the topic context)",
+  "named_buyers": [ // Up to 3 potential named buyers associated with this lead or their area of influence
+    {{
+      "buyer_name": "string (Full name of the named buyer)",
+      "buyer_title": "string (Job title of the named buyer)",
+      "buyer_rationale": "string (Brief rationale why this person is considered a potential buyer/influencer for solutions related to the topic, in context of the lead or company)"
+    }},
+    // ... more buyers if applicable (up to 3)
+  ]
+}}
+
+Example of a single lead object in the list:
+```json
+{{
+  "lead_name": "Dr. Eleanor Vance",
+  "lead_title": "VP of AI Research",
+  "lead_department": "Research and Development",
+  "linkedin_url": "https://linkedin.com/in/eleanorvance",
+  "summary_of_relevance": "As VP of AI Research, Dr. Vance is directly involved in the company's strategic direction for AI, making her a key contact for understanding {company_name}'s needs in this area.",
+  "named_buyers": [
+    {{
+      "buyer_name": "Mr. Samuel Green",
+      "buyer_title": "Chief Technology Officer (CTO)",
+      "buyer_rationale": "The CTO typically has budget authority and strategic oversight for technology adoption, including AI initiatives led by Dr. Vance's department."
+    }},
+    {{
+      "buyer_name": "Ms. Olivia Chen",
+      "buyer_title": "Director of Innovation Strategy",
+      "buyer_rationale": "Works closely with R&D on implementing new technologies and would likely be involved in evaluating solutions related to the topic."
+    }}
+  ]
+}}
+```
+
+IMPORTANT:
+- Return *only* the JSON list. Do not include any introductory text, explanations, or markdown formatting like ```json ... ``` outside the JSON list itself.
+- If no leads are found, return an empty JSON list `[]`.
+- Ensure all string fields are properly escaped within the JSON.
+- Use Google Search to find this information. Prioritize publicly available, professional information.
+"""
+    return prompt
+
+def parse_leads_from_gemini_response(gemini_response: Any) -> List[Dict]:
+    """
+    Parses the Gemini response, expecting a JSON string containing a list of leads.
+    """
+    # Assuming the response object structure is similar to what display_gemini_response handles
+    # or that the relevant text part containing JSON is directly accessible.
+    # This part might need to be made more robust based on actual Gemini API response structure
+    # for generate_content calls that are expected to return JSON.
+
+    raw_text = ""
+    if hasattr(gemini_response, 'text') and gemini_response.text: # Direct text attribute
+        raw_text = gemini_response.text
+    elif hasattr(gemini_response, 'candidates') and gemini_response.candidates:
+        # Standard path for generate_content responses
+        if gemini_response.candidates[0].content and gemini_response.candidates[0].content.parts:
+            raw_text = gemini_response.candidates[0].content.parts[0].text
+    else:
+        print("WARN (parse_leads_from_gemini_response): Gemini response structure not recognized or empty.")
+        return []
+
+    raw_text = raw_text.strip()
+
+    # Attempt to extract JSON from markdown code block if present
+    if raw_text.startswith("```json"):
+        json_block_start = raw_text.find("```json") + 7 # Length of "```json\n"
+        json_block_end = raw_text.rfind("```")
+        if json_block_start != -1 and json_block_end != -1 and json_block_end > json_block_start :
+            json_str = raw_text[json_block_start:json_block_end].strip()
+        else: # Fallback if markdown block is malformed but starts with ```json
+            json_str = raw_text.replace("```json", "").replace("```", "").strip()
+    else:
+        json_str = raw_text
+
+    try:
+        leads_data = json.loads(json_str)
+        if isinstance(leads_data, list):
+            return leads_data
+        else:
+            print(f"ERROR (parse_leads_from_gemini_response): Parsed JSON is not a list. Got: {type(leads_data)}")
+            return []
+    except json.JSONDecodeError as e:
+        print(f"ERROR (parse_leads_from_gemini_response): JSONDecodeError - {e}. Raw text was: '{json_str[:500]}...'")
+        return []
+    except Exception as e:
+        print(f"ERROR (parse_leads_from_gemini_response): An unexpected error occurred during JSON parsing - {e}")
+        return []

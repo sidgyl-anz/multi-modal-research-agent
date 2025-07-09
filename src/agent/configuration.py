@@ -16,11 +16,13 @@ class Configuration:
     synthesis_model: str = "gemini-2.5-flash"  # Citations supported model
     video_model: str = "gemini-2.5-flash"  # Citations supported model
     tts_model: str = "gemini-2.5-flash-preview-tts"
+    lead_identification_model: str = "gemini-1.5-pro-latest" # More capable model for complex JSON extraction
     
     # Temperature settings for different use cases
     search_temperature: float = 0.0           # Factual search queries
     synthesis_temperature: float = 0.3        # Balanced synthesis
     podcast_script_temperature: float = 0.4   # Creative dialogue
+    lead_identification_temperature: float = 0.2 # Lower temperature for more structured output
     
     # TTS Configuration
     mike_voice: str = "Kore"
