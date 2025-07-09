@@ -2,16 +2,36 @@ import unittest
 import json
 from unittest.mock import MagicMock, patch
 
+import os # Ensure os is imported for patch.dict(os.environ, ...)
 # Need to adjust import paths based on how tests are run.
 # Using relative imports assuming tests are run as part of the agent package.
 from ..utils import (
     generate_company_topic_research_prompt,
     generate_lead_identification_prompt,
     parse_leads_from_gemini_response,
-    create_research_report
+    create_research_report,
+    build_linkedin_cse_query,          # New import
+    fetch_linkedin_contacts_via_cse    # New import
     # display_gemini_response # if we want to test its parsing logic for simple text
 )
 from ..configuration import Configuration # For testing create_research_report with config
+
+# Mock requests for fetch_linkedin_contacts_via_cse
+class MockRequestsResponse:
+    def __init__(self, json_data, status_code):
+        self.json_data = json_data
+        self.status_code = status_code
+        self.text = json.dumps(json_data) if json_data is not None else ""
+
+    def json(self):
+        if self.json_data is None:
+            raise json.JSONDecodeError("No JSON data", "", 0)
+        return self.json_data
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            # Simplified error, actual requests.HTTPError is more complex
+            raise Exception(f"HTTP Error {self.status_code}")
 
 class TestAgentUtils(unittest.TestCase):
 
@@ -54,7 +74,7 @@ class TestAgentUtils(unittest.TestCase):
         mock_candidate = MagicMock()
         mock_candidate.content = mock_content
         mock_response.candidates = [mock_candidate]
-        mock_response.text = None # Ensure it doesn't use a direct .text if .candidates is present
+        mock_response.text = None
 
         leads = parse_leads_from_gemini_response(mock_response)
         self.assertEqual(len(leads), 1)
@@ -81,6 +101,7 @@ class TestAgentUtils(unittest.TestCase):
         mock_candidate = MagicMock()
         mock_candidate.content = mock_content
         mock_response.candidates = [mock_candidate]
+        mock_response.text = None # Ensure path A is skipped
 
         leads = parse_leads_from_gemini_response(mock_response)
         self.assertEqual(len(leads), 1)
@@ -95,6 +116,7 @@ class TestAgentUtils(unittest.TestCase):
         mock_candidate = MagicMock()
         mock_candidate.content = mock_content
         mock_response.candidates = [mock_candidate]
+        mock_response.text = None # Ensure path A is skipped
 
         leads = parse_leads_from_gemini_response(mock_response)
         self.assertEqual(len(leads), 0)
@@ -109,6 +131,7 @@ class TestAgentUtils(unittest.TestCase):
         mock_candidate = MagicMock()
         mock_candidate.content = mock_content
         mock_response.candidates = [mock_candidate]
+        mock_response.text = None # Ensure path A is skipped
 
         leads = parse_leads_from_gemini_response(mock_response)
         self.assertEqual(len(leads), 0)
@@ -122,43 +145,51 @@ class TestAgentUtils(unittest.TestCase):
         mock_candidate = MagicMock()
         mock_candidate.content = mock_content
         mock_response.candidates = [mock_candidate]
+        mock_response.text = None # Ensure path A is skipped
 
         leads = parse_leads_from_gemini_response(mock_response)
         self.assertEqual(len(leads), 0) # Expect empty list due to type mismatch
 
     def test_parse_leads_from_gemini_response_empty_response_text(self):
         mock_response = MagicMock()
-        mock_part = MagicMock()
-        mock_part.text = ""
-        mock_content = MagicMock()
-        mock_content.parts = [mock_part]
-        mock_candidate = MagicMock()
-        mock_candidate.content = mock_content
-        mock_response.candidates = [mock_candidate]
+        mock_response.text = "" # This is what we want to test, Path A with empty string
+        # mock_part = MagicMock() # Not needed for this test
+        # mock_part.text = ""      # Not needed
+        # mock_content = MagicMock() # Not needed
+        # mock_content.parts = [mock_part] # Not needed
+        # mock_candidate = MagicMock() # Not needed
+        # mock_candidate.content = mock_content # Not needed
+        mock_response.candidates = None # Explicitly ensure Path B is not taken
 
         leads = parse_leads_from_gemini_response(mock_response)
         self.assertEqual(len(leads), 0)
 
     def test_parse_leads_from_gemini_response_no_candidates(self):
         mock_response = MagicMock()
-        mock_response.candidates = [] # No candidates
+        mock_response.text = None # Ensure path A is skipped
+        mock_response.candidates = [] # No candidates, so path B is skipped
+        # Should hit path C and return []
         leads = parse_leads_from_gemini_response(mock_response)
         self.assertEqual(len(leads), 0)
 
     def test_parse_leads_from_gemini_response_no_parts(self):
         mock_response = MagicMock()
+        mock_response.text = None # Ensure path A is skipped
         mock_content = MagicMock()
-        mock_content.parts = [] # No parts
+        mock_content.parts = [] # No parts, so raw_text remains "" from Path B's default assignment
         mock_candidate = MagicMock()
         mock_candidate.content = mock_content
         mock_response.candidates = [mock_candidate]
+        # Path B will be taken, but inner if '...parts[0].text' will effectively not run if parts is empty
+        # raw_text remains "" as initialized inside the function (or from the part before .text if parts not empty but .text is not there)
+        # The function should then try to parse "" which results in an empty list.
         leads = parse_leads_from_gemini_response(mock_response)
         self.assertEqual(len(leads), 0)
 
     # Test for create_research_report (focus on prompt construction and data inclusion)
     # This is more of an integration test for the utility function itself.
     # We'll mock the actual genai_client.models.generate_content call within it.
-    @patch('agent.utils.genai_client') # Mock the global genai_client used in utils
+    @patch('src.agent.utils.genai_client') # Corrected patch target
     def test_create_research_report_topic_only(self, mock_genai_client):
         # Mock Gemini's response for synthesis
         mock_gemini_synthesis_response = MagicMock()
@@ -187,8 +218,8 @@ class TestAgentUtils(unittest.TestCase):
         self.assertNotIn("COMPANY-SPECIFIC", mock_genai_client.models.generate_content.call_args[1]['contents'])
 
 
-    @patch('agent.utils.genai_client')
-    @patch('agent.utils.storage.Client') # Mock GCS client
+    @patch('src.agent.utils.genai_client') # Corrected patch target
+    @patch('src.agent.utils.storage.Client') # Corrected patch target
     def test_create_research_report_topic_company_leads(self, mock_gcs_client, mock_genai_client):
         # Mock Gemini's response for synthesis
         mock_gemini_synthesis_response = MagicMock()
@@ -241,6 +272,74 @@ class TestAgentUtils(unittest.TestCase):
         self.assertIn("IDENTIFIED LEADS AT LeadGen Corp", synthesis_prompt_sent_to_gemini)
         self.assertIn("Lead Alpha", synthesis_prompt_sent_to_gemini) # Check if lead data was in prompt
         self.assertIn("Buyer One", synthesis_prompt_sent_to_gemini)
+
+    def test_build_linkedin_cse_query(self):
+        company_name = "Test Inc."
+        title_areas = ["Software Engineer", "Product Manager"]
+        expected_query = 'site:linkedin.com/in ("Test Inc.") ("Software Engineer" OR "Product Manager")'
+        query = build_linkedin_cse_query(company_name, title_areas)
+        self.assertEqual(query, expected_query)
+
+    @patch('src.agent.utils.requests.get')
+    def test_fetch_linkedin_contacts_via_cse_success(self, mock_requests_get):
+        mock_api_key = "test_cse_api_key"
+        mock_cse_id = "test_cse_id"
+        query = "test_query"
+
+        # Mock successful API response
+        mock_response_data = {
+            "items": [
+                {"title": "Profile 1 - Test Inc.", "link": "http://linkedin.com/in/profile1", "snippet": "Snippet 1"},
+                {"title": "Profile 2 - Test Inc.", "link": "http://linkedin.com/in/profile2", "snippet": "Snippet 2"}
+            ]
+        }
+        mock_requests_get.return_value = MockRequestsResponse(json_data=mock_response_data, status_code=200)
+
+        contacts = fetch_linkedin_contacts_via_cse(query, mock_api_key, mock_cse_id)
+
+        self.assertEqual(len(contacts), 2)
+        self.assertEqual(contacts[0]['title'], "Profile 1 - Test Inc.")
+        mock_requests_get.assert_called_once()
+        called_url = mock_requests_get.call_args[0][0]
+        called_params = mock_requests_get.call_args[1]['params']
+        self.assertEqual(called_url, "https://www.googleapis.com/customsearch/v1")
+        self.assertEqual(called_params['q'], query)
+        self.assertEqual(called_params['key'], mock_api_key)
+        self.assertEqual(called_params['cx'], mock_cse_id)
+
+    @patch('src.agent.utils.requests.get')
+    def test_fetch_linkedin_contacts_via_cse_http_error(self, mock_requests_get):
+        mock_api_key = "test_cse_api_key"
+        mock_cse_id = "test_cse_id"
+        query = "test_query_http_error"
+
+        mock_requests_get.return_value = MockRequestsResponse(json_data={"error": "bad request"}, status_code=400)
+
+        contacts = fetch_linkedin_contacts_via_cse(query, mock_api_key, mock_cse_id)
+        self.assertEqual(len(contacts), 0) # Expect empty list on error
+
+    @patch('src.agent.utils.requests.get')
+    def test_fetch_linkedin_contacts_via_cse_no_items(self, mock_requests_get):
+        mock_api_key = "test_cse_api_key"
+        mock_cse_id = "test_cse_id"
+        query = "test_query_no_items"
+
+        mock_requests_get.return_value = MockRequestsResponse(json_data={"items": []}, status_code=200)
+
+        contacts = fetch_linkedin_contacts_via_cse(query, mock_api_key, mock_cse_id)
+        self.assertEqual(len(contacts), 0)
+
+    @patch('src.agent.utils.requests.get')
+    def test_fetch_linkedin_contacts_via_cse_request_exception(self, mock_requests_get):
+        mock_api_key = "test_cse_api_key"
+        mock_cse_id = "test_cse_id"
+        query = "test_query_request_exception"
+
+        # Simulate a requests.exceptions.RequestException (e.g., network error)
+        mock_requests_get.side_effect = Exception("Network Error") # requests.exceptions.RequestException("Network Error")
+
+        contacts = fetch_linkedin_contacts_via_cse(query, mock_api_key, mock_cse_id)
+        self.assertEqual(len(contacts), 0)
 
 
 if __name__ == '__main__':
