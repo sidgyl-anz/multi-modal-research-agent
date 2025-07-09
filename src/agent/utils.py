@@ -1,6 +1,7 @@
 import os
 import wave
 import json # Import json module
+import requests # For CSE API calls
 import datetime # For signed URL expiration
 from typing import Optional, List, Dict, Any # Added for type hints
 from google.genai import Client, types
@@ -233,6 +234,7 @@ def create_research_report(
     company_specific_topic_research_text: Optional[str] = None,
     company_info_text: Optional[str] = None,
     identified_leads_data: Optional[List[Dict]] = None,
+    linkedin_cse_contacts: Optional[List[Dict]] = None, # New parameter
     configuration=None
 ):
     """Create a comprehensive research report by synthesizing available content based on research approach."""
@@ -349,6 +351,18 @@ Begin the report now, starting with the Introduction (the title is already defin
 
     if search_sources_text: # General search sources
         report_sections.append(f"\n\n## Additional Research Sources\n{search_sources_text if search_sources_text else 'None available'}")
+
+    if linkedin_cse_contacts:
+        cse_contacts_md_section = ["\n\n## LinkedIn Contacts (via Custom Search)\n"]
+        if not linkedin_cse_contacts:
+            cse_contacts_md_section.append("No additional LinkedIn contacts found via Custom Search Engine.")
+        else:
+            for i, contact in enumerate(linkedin_cse_contacts):
+                cse_contacts_md_section.append(f"### CSE Contact {i+1}: {contact.get('title', 'N/A')}")
+                cse_contacts_md_section.append(f"-   **Link:** {contact.get('link', 'N/A')}")
+                cse_contacts_md_section.append(f"-   **Snippet:** {contact.get('snippet', 'N/A')}")
+                cse_contacts_md_section.append("\n")
+        report_sections.append("\n".join(cse_contacts_md_section))
 
     report_sections.append("\n\n---\n*Report generated using multi-modal AI research.*")
     report_content = "\n".join(report_sections)
@@ -513,3 +527,56 @@ def parse_leads_from_gemini_response(gemini_response: Any) -> List[Dict]:
     except Exception as e:
         print(f"ERROR (parse_leads_from_gemini_response): An unexpected error occurred during JSON parsing - {e}")
         return []
+
+def build_linkedin_cse_query(company_name: str, title_areas: List[str]) -> str:
+    """Builds a Google Custom Search query for LinkedIn profiles."""
+    # Sanitize company name and titles for query (simple quotes for now)
+    safe_company_name = f'"{company_name}"'
+    safe_title_queries = [f'"{title}"' for title in title_areas]
+    titles_query_part = " OR ".join(safe_title_queries)
+
+    # Construct the query
+    # Example: site:linkedin.com/in ("Some Company") ("VP of Engineering" OR "Chief Architect")
+    query = f'site:linkedin.com/in ({safe_company_name}) ({titles_query_part})'
+    return query
+
+def fetch_linkedin_contacts_via_cse(query: str, api_key: str, cse_id: str, num_results: int = 10) -> List[Dict]:
+    """
+    Fetches LinkedIn contacts using Google Custom Search API.
+    Returns a list of dicts, each with 'title', 'link', 'snippet'.
+    """
+    print(f"INFO (fetch_linkedin_contacts_via_cse): Performing CSE search with query: {query}", flush=True)
+    url = "https://www.googleapis.com/customsearch/v1"
+    params = {
+        'q': query,
+        'key': api_key,
+        'cx': cse_id,
+        'num': num_results, # Number of search results to return
+        # 'gl': 'us',  # Optional: Geolocation bias (country)
+        # 'lr': 'lang_en',  # Optional: Language restriction
+    }
+
+    contacts_found = []
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()  # Raise an exception for HTTP errors (4xx or 5xx)
+        search_results = response.json()
+
+        items = search_results.get('items', [])
+        for item in items:
+            contacts_found.append({
+                "title": item.get("title", "N/A"),
+                "link": item.get("link", "N/A"),
+                "snippet": item.get("snippet", "N/A")
+            })
+        print(f"INFO (fetch_linkedin_contacts_via_cse): Found {len(contacts_found)} contacts via CSE.", flush=True)
+    except requests.exceptions.HTTPError as http_err:
+        print(f"ERROR (fetch_linkedin_contacts_via_cse): HTTP error occurred: {http_err} - {response.text}", flush=True)
+    except requests.exceptions.RequestException as req_err:
+        print(f"ERROR (fetch_linkedin_contacts_via_cse): Request error occurred: {req_err}", flush=True)
+    except json.JSONDecodeError as json_err:
+        print(f"ERROR (fetch_linkedin_contacts_via_cse): JSON decode error: {json_err} - Response was: {response.text}", flush=True)
+    except Exception as e:
+        print(f"ERROR (fetch_linkedin_contacts_via_cse): An unexpected error occurred: {e}", flush=True)
+
+    return contacts_found

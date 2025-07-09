@@ -21,6 +21,7 @@ class ResearchStateOutput(TypedDict):
     podcast_script: Optional[str] # Text script of the podcast
     podcast_url: Optional[str] # URL to the podcast audio file
     identified_leads: Optional[List[Dict]] # List of identified leads with details
+    linkedin_cse_contacts: Optional[List[Dict]] # Contacts found via CSE LinkedIn search
 
 class ResearchState(TypedDict):
     """Full state for the research and podcast generation workflow"""
@@ -43,6 +44,7 @@ class ResearchState(TypedDict):
     company_specific_topic_research_text: Optional[str]
     company_info_text: Optional[str]
     identified_leads_data: Optional[List[Dict]] # Raw data from lead identification step
+    linkedin_cse_contacts: Optional[List[Dict]] # Raw data from CSE LinkedIn search
 
     # Common intermediate result for synthesis
     synthesis_text: Optional[str] # Text used for report/podcast generation
@@ -52,3 +54,4 @@ class ResearchState(TypedDict):
     podcast_script: Optional[str]
     podcast_url: Optional[str]
     identified_leads: Optional[List[Dict]]
+    linkedin_cse_contacts: Optional[List[Dict]]

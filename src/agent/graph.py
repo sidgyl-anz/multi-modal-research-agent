@@ -12,9 +12,11 @@ from .utils import (
     create_podcast_discussion,
     create_research_report,
     genai_client,
-    generate_company_topic_research_prompt, # New
-    generate_lead_identification_prompt,    # New
-    parse_leads_from_gemini_response       # New
+    generate_company_topic_research_prompt,
+    generate_lead_identification_prompt,
+    parse_leads_from_gemini_response,
+    build_linkedin_cse_query,               # New
+    fetch_linkedin_contacts_via_cse         # New
 )
 from .configuration import Configuration
 from langsmith import traceable
@@ -183,7 +185,7 @@ def create_report_node(state: ResearchState, config: RunnableConfig) -> dict:
     configuration = Configuration.from_runnable_config(config)
     topic = state["topic"]
     research_approach = state["research_approach"] # New
-    
+
     # Data for "Topic Only" or common data
     search_text = state.get("search_text") # This will be populated by search_research_node
     search_sources_text = state.get("search_sources_text") # From search_research_node
@@ -219,7 +221,42 @@ def create_report_node(state: ResearchState, config: RunnableConfig) -> dict:
         "report": report_url_or_text,
         "synthesis_text": synthesis_text
         # 'identified_leads' output field is populated by identify_leads_node directly
+    # 'linkedin_cse_contacts' will be populated by the new CSE search node.
     }
+
+@traceable(run_type="tool", name="Search LinkedIn via CSE", project_name="multi-modal-researcher")
+def search_linkedin_via_cse_node(state: ResearchState, config: RunnableConfig) -> dict:
+    """Node that searches LinkedIn for contacts using Google Custom Search Engine."""
+    # Configuration is not directly used here for CSE keys, as they come from env vars.
+    # However, if we added CSE config (like num_results) to Configuration, we'd load it.
+    # configuration = Configuration.from_runnable_config(config)
+
+    company_name = state.get("company_name")
+    title_areas = state.get("title_areas")
+
+    if not company_name or not title_areas:
+        print("WARN (search_linkedin_via_cse_node): Company name or title areas missing. Skipping CSE LinkedIn search.")
+        return {"linkedin_cse_contacts": []}
+
+    # Retrieve API keys from environment variables
+    # These must be set in the environment where the agent is running.
+    cse_api_key = os.getenv("GOOGLE_API_KEY_FOR_CSE")
+    cse_id = os.getenv("GOOGLE_CSE_ID")
+
+    if not cse_api_key or not cse_id:
+        print("WARN (search_linkedin_via_cse_node): GOOGLE_API_KEY_FOR_CSE or GOOGLE_CSE_ID not set in environment. Skipping CSE LinkedIn search.")
+        return {"linkedin_cse_contacts": []}
+
+    query = build_linkedin_cse_query(company_name, title_areas)
+
+    # Potentially get num_results from config if we add it there, e.g., configuration.cse_num_results
+    num_results_to_fetch = 10 # Default or could be from config
+
+    linkedin_contacts = fetch_linkedin_contacts_via_cse(query, cse_api_key, cse_id, num_results=num_results_to_fetch)
+
+    print(f"DEBUG (search_linkedin_via_cse_node): Found {len(linkedin_contacts)} LinkedIn contacts via CSE.", flush=True)
+
+    return {"linkedin_cse_contacts": linkedin_contacts}
 
 
 @traceable(run_type="llm", name="Create Podcast", project_name="multi-modal-researcher")
@@ -245,7 +282,7 @@ def create_podcast_node(state: ResearchState, config: RunnableConfig) -> dict:
                                            or state.get("company_info_text", "") # Use company research
     else: # "Topic Only"
         primary_research_text_for_podcast = state.get("search_text", "") # Use general topic research
-    
+
     # Fallback to synthesis_text if primary research texts are empty but synthesis exists
     if not primary_research_text_for_podcast and state.get("synthesis_text"):
         # This case implies the podcast is more of a summary of the report itself.
@@ -322,11 +359,12 @@ def create_research_graph() -> StateGraph:
     
     # Add all nodes, including new ones
     graph.add_node("search_research", search_research_node) # For "Topic Only"
-    graph.add_node("company_topic_research", company_topic_research_node) # New
-    graph.add_node("identify_leads", identify_leads_node) # New
+    graph.add_node("company_topic_research", company_topic_research_node)
+    graph.add_node("identify_leads", identify_leads_node)
+    graph.add_node("search_linkedin_via_cse", search_linkedin_via_cse_node) # New CSE node
     graph.add_node("analyze_video", analyze_video_node)
-    graph.add_node("create_report", create_report_node) # Modified
-    graph.add_node("create_podcast", create_podcast_node) # Modified
+    graph.add_node("create_report", create_report_node)
+    graph.add_node("create_podcast", create_podcast_node)
 
     # 1. Start: Conditional routing based on research_approach
     graph.add_conditional_edges(
@@ -350,14 +388,15 @@ def create_research_graph() -> StateGraph:
     )
 
     # 3. "Topic Company Leads" Path
-    # company_topic_research -> identify_leads -> (optional video) -> create_report
+    # company_topic_research -> identify_leads -> search_linkedin_via_cse -> (optional video) -> create_report
     graph.add_edge("company_topic_research", "identify_leads")
+    graph.add_edge("identify_leads", "search_linkedin_via_cse") # New edge
     graph.add_conditional_edges(
-        "identify_leads",
-        should_analyze_video, # Use the same conditional for video analysis
+        "search_linkedin_via_cse", # From new CSE node
+        should_analyze_video,
         {
             "analyze_video": "analyze_video",
-            "create_report": "create_report" # If no video, go directly to report
+            "create_report": "create_report"
         }
     )
 
@@ -388,15 +427,25 @@ def create_compiled_graph():
 if __name__ == "__main__":
     # This block allows direct execution for manual testing.
     # Ensure GEMINI_API_KEY is set in your environment.
+    # For CSE LinkedIn search, also set GOOGLE_API_KEY_FOR_CSE and GOOGLE_CSE_ID.
     # You might also need GOOGLE_APPLICATION_CREDENTIALS for GCS if testing podcast/report GCS upload.
 
     print("Attempting to run research graph for manual testing...", flush=True)
+    print("Required Env Vars for full test: GEMINI_API_KEY, GOOGLE_API_KEY_FOR_CSE, GOOGLE_CSE_ID, (optional for GCS: GCS_BUCKET_NAME, GOOGLE_APPLICATION_CREDENTIALS)", flush=True)
+
     if not os.getenv("GEMINI_API_KEY"):
-        print("GEMINI_API_KEY is not set. Please set it to run the test.", flush=True)
+        print("GEMINI_API_KEY is not set. Gemini related calls will fail.", flush=True)
     else:
         print(f"GEMINI_API_KEY found, starting with: {os.getenv('GEMINI_API_KEY')[:5]}", flush=True)
 
-        compiled_graph = create_compiled_graph()
+    if not os.getenv("GOOGLE_API_KEY_FOR_CSE") or not os.getenv("GOOGLE_CSE_ID"):
+        print("GOOGLE_API_KEY_FOR_CSE or GOOGLE_CSE_ID not set. CSE LinkedIn search will be skipped or fail.", flush=True)
+    else:
+        print(f"GOOGLE_API_KEY_FOR_CSE found, starting with: {os.getenv('GOOGLE_API_KEY_FOR_CSE')[:5]}", flush=True)
+        print(f"GOOGLE_CSE_ID found, starting with: {os.getenv('GOOGLE_CSE_ID')[:5]}", flush=True)
+
+    compiled_graph = create_compiled_graph()
+    if compiled_graph: # Ensure compilation was successful (e.g. GEMINI_API_KEY check inside create_compiled_graph)
 
         # Test Case 1: Topic Only Research
         print("\n--- Test Case 1: Topic Only ---", flush=True)
@@ -425,7 +474,8 @@ if __name__ == "__main__":
                 print(f"  Report: {final_output_topic_only.get('report')}", flush=True)
                 print(f"  Podcast Script: {'Generated' if final_output_topic_only.get('podcast_script') else 'Not generated'}", flush=True)
                 print(f"  Podcast URL: {final_output_topic_only.get('podcast_url')}", flush=True)
-                print(f"  Identified Leads: {final_output_topic_only.get('identified_leads')}", flush=True)
+                print(f"  Identified Leads (Gemini): {final_output_topic_only.get('identified_leads')}", flush=True)
+                print(f"  LinkedIn CSE Contacts: {final_output_topic_only.get('linkedin_cse_contacts')}", flush=True)
             else:
                 print("No final output captured for Topic Only case.", flush=True)
         except Exception as e:
@@ -459,9 +509,12 @@ if __name__ == "__main__":
                 print(f"  Report: {final_output_company_leads.get('report')}", flush=True)
                 print(f"  Podcast Script: {'Generated' if final_output_company_leads.get('podcast_script') else 'Not generated'}", flush=True)
                 print(f"  Podcast URL: {final_output_company_leads.get('podcast_url')}", flush=True)
-                print(f"  Identified Leads Count: {len(final_output_company_leads.get('identified_leads', []))}", flush=True)
+                print(f"  Identified Leads (Gemini) Count: {len(final_output_company_leads.get('identified_leads', []))}", flush=True)
                 if final_output_company_leads.get('identified_leads'):
-                    print(f"  First Lead Example: {json.dumps(final_output_company_leads.get('identified_leads')[0], indent=2)}", flush=True)
+                    print(f"  First Gemini Lead Example: {json.dumps(final_output_company_leads.get('identified_leads')[0], indent=2)}", flush=True)
+                print(f"  LinkedIn CSE Contacts Count: {len(final_output_company_leads.get('linkedin_cse_contacts', []))}", flush=True)
+                if final_output_company_leads.get('linkedin_cse_contacts'):
+                    print(f"  First LinkedIn CSE Contact Example: {json.dumps(final_output_company_leads.get('linkedin_cse_contacts')[0], indent=2)}", flush=True)
             else:
                 print("No final output captured for Topic Company Leads case.", flush=True)
 
