@@ -69,6 +69,7 @@ LangGraph will open in your browser.
 - 📚 API Docs: http://127.0.0.1:2024/docs
 ```
 
+
 5. **Provide Input to the Agent**:
    The agent now accepts a JSON input with the following structure:
    ```json
@@ -213,9 +214,13 @@ The primary endpoint for running the research graph is:
 -   **API Docs:** The LangGraph server typically provides OpenAPI (Swagger) documentation at its `/docs` path (e.g., `http://127.0.0.1:2024/docs`), where you can explore all available endpoints and schemas.
 
 ### CORS (Cross-Origin Resource Sharing)
+=======
+<img width="1604" alt="Screenshot 2025-06-24 at 5 13 31 PM" src="https://github.com/user-attachments/assets/6407e802-8932-4cfb-bdf9-5af96050ee1f" />
+*(Note: The screenshot shows the older UI; input will now be a single JSON object as described above.)*
 
-If your React frontend is served from a different domain or port than the LangGraph API (e.g., React app on `http://localhost:3000` and API on `http://localhost:2024`), you will need to enable CORS on the LangGraph API server.
-When using `langgraph dev`, you can often pass flags like `--cors-origins \"http://localhost:3000\"` (or your React app's URL). For production deployments, CORS policies would be configured at the API gateway or server level.
+
+
+-   **API Docs:** The LangGraph server typically provides OpenAPI (Swagger) documentation at its `/docs` path (e.g., `http://127.0.0.1:2024/docs`), where you can explore all available endpoints and schemas.
 
 ## Architecture
 
