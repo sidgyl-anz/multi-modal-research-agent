@@ -51,48 +51,24 @@ class TestAgentUtils(unittest.TestCase):
         prompt = generate_lead_identification_prompt(company_name, title_areas, company_topic_context)
 
         self.assertIn(company_name, prompt)
-        self.assertIn("VP of Engineering", prompt) # title_areas are still in the prompt as a hint
-        self.assertIn("Chief Architect", prompt)   # title_areas are still in the prompt as a hint
+        self.assertIn("VP of Engineering", prompt)
+        self.assertIn("Chief Architect", prompt)
         self.assertIn(company_topic_context[:100], prompt) # Check if context is included
-
-        # Check for new B2B opportunity keys
-        self.assertIn("opportunity_name", prompt)
-        self.assertIn("opportunity_description", prompt)
-        self.assertIn("relevant_departments", prompt)
-        self.assertIn("contact_points", prompt)
-        self.assertIn("contact_name", prompt)
-        self.assertIn("contact_title", prompt)
-        self.assertIn("contact_department", prompt)
-        self.assertIn("contact_linkedin_url", prompt)
-        self.assertIn("contact_relevance_to_opportunity", prompt)
-        self.assertIn("potential_decision_makers_for_opportunity", prompt)
-        self.assertIn("dm_name", prompt)
-        self.assertIn("dm_title", prompt)
-        self.assertIn("dm_rationale", prompt)
-
+        self.assertIn("lead_name", prompt)
+        self.assertIn("lead_title", prompt)
+        self.assertIn("lead_department", prompt)
+        self.assertIn("named_buyers", prompt)
+        self.assertIn("buyer_name", prompt)
+        self.assertIn("buyer_title", prompt)
         self.assertIn("Use Google Search", prompt)
-        self.assertIn("The entire response MUST be a single valid JSON list.", prompt) # Corrected assertion
-        self.assertIn("B2B Sales Opportunity Identification AI", prompt) # Check role play
+        self.assertIn("Return *only* the JSON list", prompt)
 
     def test_parse_leads_from_gemini_response_correct_json(self):
         mock_response = MagicMock()
-        # New B2B Opportunity structure
-        opportunity_data = [
-            {
-                "opportunity_name": "AI CRM Upgrade",
-                "opportunity_description": "Upgrade existing CRM with AI.",
-                "relevant_departments": ["Sales", "IT"],
-                "contact_points": [
-                    {"contact_name": "John Doe", "contact_title": "Sales Manager", "contact_department": "Sales", "contact_linkedin_url": "linkedin.com/johndoe", "contact_relevance_to_opportunity": "Manages sales team"}
-                ],
-                "potential_decision_makers_for_opportunity": [
-                    {"dm_name": "Jane CEO", "dm_title": "CEO", "dm_rationale": "Overall budget holder"}
-                ]
-            }
-        ]
+        lead_data = [{"lead_name": "John Doe", "lead_title": "CEO"}]
+        # Simulate Gemini response structure (candidates[0].content.parts[0].text)
         mock_part = MagicMock()
-        # Correctly assign opportunity_data to mock_part.text ONCE
-        mock_part.text = json.dumps(opportunity_data)
+        mock_part.text = json.dumps(lead_data)
         mock_content = MagicMock()
         mock_content.parts = [mock_part]
         mock_candidate = MagicMock()
@@ -100,33 +76,26 @@ class TestAgentUtils(unittest.TestCase):
         mock_response.candidates = [mock_candidate]
         mock_response.text = None
 
-        opportunities = parse_leads_from_gemini_response(mock_response)
-        self.assertEqual(len(opportunities), 1)
-        self.assertEqual(opportunities[0]["opportunity_name"], "AI CRM Upgrade")
-        self.assertEqual(opportunities[0]["contact_points"][0]["contact_name"], "John Doe")
+        leads = parse_leads_from_gemini_response(mock_response)
+        self.assertEqual(len(leads), 1)
+        self.assertEqual(leads[0]["lead_name"], "John Doe")
 
     def test_parse_leads_from_gemini_response_direct_text_json(self):
         mock_response = MagicMock()
-        opportunity_data = [
-            {
-                "opportunity_name": "Direct AI CRM Upgrade",
-                "contact_points": [{"contact_name": "Alex Direct"}]
-            }
-        ]
-        mock_response.text = json.dumps(opportunity_data)
+        lead_data = [{"lead_name": "Jane Alex", "lead_title": "CTO"}]
+        mock_response.text = json.dumps(lead_data)
         mock_response.candidates = None # Ensure it uses direct .text
 
-        opportunities = parse_leads_from_gemini_response(mock_response)
-        self.assertEqual(len(opportunities), 1)
-        self.assertEqual(opportunities[0]["opportunity_name"], "Direct AI CRM Upgrade")
-        self.assertEqual(opportunities[0]["contact_points"][0]["contact_name"], "Alex Direct")
+        leads = parse_leads_from_gemini_response(mock_response)
+        self.assertEqual(len(leads), 1)
+        self.assertEqual(leads[0]["lead_name"], "Jane Alex")
 
 
     def test_parse_leads_from_gemini_response_json_in_markdown(self):
         mock_response = MagicMock()
-        opportunity_data = [{"opportunity_name": "Markdown Opp"}]
+        lead_data = [{"lead_name": "Mark Down"}]
         mock_part = MagicMock()
-        mock_part.text = f"Some text before\n```json\n{json.dumps(opportunity_data)}\n```\nSome text after"
+        mock_part.text = f"Some text before\n```json\n{json.dumps(lead_data)}\n```\nSome text after"
         mock_content = MagicMock()
         mock_content.parts = [mock_part]
         mock_candidate = MagicMock()
@@ -134,9 +103,9 @@ class TestAgentUtils(unittest.TestCase):
         mock_response.candidates = [mock_candidate]
         mock_response.text = None # Ensure path A is skipped
 
-        opportunities = parse_leads_from_gemini_response(mock_response)
-        self.assertEqual(len(opportunities), 1)
-        self.assertEqual(opportunities[0]["opportunity_name"], "Markdown Opp")
+        leads = parse_leads_from_gemini_response(mock_response)
+        self.assertEqual(len(leads), 1)
+        self.assertEqual(leads[0]["lead_name"], "Mark Down")
 
     def test_parse_leads_from_gemini_response_malformed_json(self):
         mock_response = MagicMock()
@@ -272,67 +241,37 @@ class TestAgentUtils(unittest.TestCase):
 
 
         config = Configuration()
-        # New B2B Opportunity structure for identified_leads_data
-        b2b_opportunities_data = [
-            {
-                "opportunity_name": "AI CRM Upgrade for LeadGen Corp",
-                "opportunity_description": "Upgrade existing CRM with AI capabilities to improve sales forecasting.",
-                "relevant_departments": ["Sales", "IT", "Product"],
-                "contact_points": [
-                    {"contact_name": "John Contact", "contact_title": "Sales Operations Lead", "contact_department": "Sales", "contact_linkedin_url": "linkedin.com/johncontact", "contact_relevance_to_opportunity": "Manages CRM usage and sales process efficiency."}
-                ],
-                "potential_decision_makers_for_opportunity": [
-                    {"dm_name": "Alice Approver", "dm_title": "VP of Sales", "dm_rationale": "Budget holder for sales tools and CRM."},
-                    {"dm_name": "Bob Budget", "dm_title": "CTO", "dm_rationale": "Oversees technology stack including CRM infrastructure."}
-                ]
-            }
-        ]
-
-        # Mock CSE contacts data as well, since create_research_report now accepts it
-        mock_cse_contacts = [
-            {"title": "CSE Contact 1", "link": "http://linkedin.com/cse1", "snippet": "Found via CSE."}
+        identified_leads = [
+            {"lead_name": "Lead Alpha", "lead_title": "Big Boss", "lead_department": "Strategy",
+             "linkedin_url": "http://linkedin.com/alpha", "summary_of_relevance": "Very relevant",
+             "named_buyers": [{"buyer_name": "Buyer One", "buyer_title": "Money Bags", "buyer_rationale": "Signs checks"}]}
         ]
 
         with patch.dict(os.environ, {"GCS_BUCKET_NAME": "test-bucket"}): # Mock GCS bucket env var
             report_url_or_text, synthesis_text = create_research_report(
                 topic="AI Solutions",
                 research_approach="Topic Company Leads",
-                search_text=None,
+                search_text=None, # No general search text for this path usually
                 video_text="Video about AI.",
-                search_sources_text=None,
+                search_sources_text=None, # No general search sources
                 video_url="http://example.com/ai_video",
                 company_name="LeadGen Corp",
-                company_specific_topic_research_text="LeadGen Corp is exploring AI for CRM.",
-                company_info_text="LeadGen Corp is a leader in innovative sales solutions.",
-                identified_leads_data=b2b_opportunities_data, # Pass new structure
-                linkedin_cse_contacts=mock_cse_contacts,     # Pass mock CSE contacts
+                company_specific_topic_research_text="LeadGen Corp is exploring AI.",
+                company_info_text="LeadGen Corp is a leader.",
+                identified_leads_data=identified_leads,
                 configuration=config
             )
 
         self.assertIn("Synthesized company and lead research.", synthesis_text)
-        self.assertEqual("http://gcs.example.com/report.md", report_url_or_text)
+        self.assertEqual("http://gcs.example.com/report.md", report_url_or_text) # Expecting GCS URL
 
-        # Check prompt to Gemini for synthesis
+        # Check that the prompt to Gemini contained company/lead related keywords
         synthesis_prompt_sent_to_gemini = mock_genai_client.models.generate_content.call_args[1]['contents']
         self.assertIn("COMPANY-SPECIFIC TOPIC RESEARCH (LeadGen Corp)", synthesis_prompt_sent_to_gemini)
         self.assertIn("GENERAL COMPANY INFORMATION (LeadGen Corp)", synthesis_prompt_sent_to_gemini)
-        self.assertIn("SUMMARY OF IDENTIFIED B2B OPPORTUNITIES", synthesis_prompt_sent_to_gemini) # Check for new summary type
-        self.assertIn("AI CRM Upgrade for LeadGen Corp", synthesis_prompt_sent_to_gemini)
-        self.assertIn("John Contact", synthesis_prompt_sent_to_gemini) # Check contact point in prompt
-
-        # Check final report content for new sections and details
-        # This part of the test might need access to the actual report_content if GCS fails or is not used.
-        # For now, assuming GCS works and report_url_or_text is the URL.
-        # To test the actual content, we'd need to modify create_research_report to return text if GCS_BUCKET_NAME is not set.
-        # Let's assume the GCS part is mocked correctly and focus on the prompt.
-        # If we had the report_content string, we would:
-        # self.assertIn("## Identified B2B Opportunities", report_content_string)
-        # self.assertIn("Opportunity 1: AI CRM Upgrade for LeadGen Corp", report_content_string)
-        # self.assertIn("John Contact", report_content_string)
-        # self.assertIn("Alice Approver", report_content_string)
-        # self.assertIn("## LinkedIn Contacts (via Custom Search)", report_content_string)
-        # self.assertIn("CSE Contact 1", report_content_string)
-
+        self.assertIn("IDENTIFIED LEADS AT LeadGen Corp", synthesis_prompt_sent_to_gemini)
+        self.assertIn("Lead Alpha", synthesis_prompt_sent_to_gemini) # Check if lead data was in prompt
+        self.assertIn("Buyer One", synthesis_prompt_sent_to_gemini)
 
     def test_build_linkedin_cse_query(self):
         company_name = "Test Inc."
