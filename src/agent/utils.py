@@ -258,18 +258,14 @@ def create_research_report(
     if video_text:
         input_materials_sections.append(f"VIDEO CONTENT INSIGHTS:\n{video_text}\n")
 
-    if identified_leads_data:
-        leads_summary_for_prompt = []
-        for idx, lead in enumerate(identified_leads_data[:5]): # Show details for up to 5 leads in prompt
-            lead_str = f"  Lead {idx+1}: {lead.get('lead_name', 'N/A')} ({lead.get('lead_title', 'N/A')})\n"
-            lead_str += f"    Department: {lead.get('lead_department', 'N/A')}\n"
-            lead_str += f"    Relevance: {lead.get('summary_of_relevance', 'N/A')}\n"
-            if lead.get('named_buyers'):
-                lead_str += f"    Named Buyers:\n"
-                for buyer_idx, buyer in enumerate(lead.get('named_buyers', [])):
-                    lead_str += f"      - {buyer.get('buyer_name', 'N/A')} ({buyer.get('buyer_title', 'N/A')}): {buyer.get('buyer_rationale', 'N/A')}\n"
-            leads_summary_for_prompt.append(lead_str)
-        input_materials_sections.append(f"IDENTIFIED LEADS AT {company_name}:\n" + "\n".join(leads_summary_for_prompt) + "\n")
+    if identified_leads_data: # This now contains B2B Opportunity objects
+        opportunity_summary_for_prompt = ["\n\nSUMMARY OF IDENTIFIED B2B OPPORTUNITIES:"]
+        for idx, opp in enumerate(identified_leads_data[:3]): # Summarize first 3 opportunities for prompt context
+            opportunity_summary_for_prompt.append(f"  Opportunity {idx+1}: {opp.get('opportunity_name', 'N/A')}")
+            opportunity_summary_for_prompt.append(f"    Description: {opp.get('opportunity_description', 'N/A')[:200]}...") # Snippet
+            if opp.get('contact_points'):
+                opportunity_summary_for_prompt.append(f"    Key Contact: {opp['contact_points'][0].get('contact_name', 'N/A')} ({opp['contact_points'][0].get('contact_title', 'N/A')})")
+        input_materials_sections.append("\n".join(opportunity_summary_for_prompt))
 
     all_input_text = "\n---\n".join(input_materials_sections)
 
@@ -327,24 +323,38 @@ Begin the report now, starting with the Introduction (the title is already defin
     synthesis_text = synthesis_response.candidates[0].content.parts[0].text
     
     # Step 2: Create markdown report string
-    report_sections = [f"# {prompt_title}\n\n{synthesis_text}"]
+    report_sections = [f"# {prompt_title}\n\n{synthesis_text}"] # This is the main LLM-generated synthesis
 
-    if research_approach == "Topic Company Leads" and identified_leads_data:
-        leads_md_section = ["\n\n## Identified Leads Summary\n"]
+    # Section for Identified B2B Opportunities (from Gemini)
+    if research_approach == "Topic Company Leads" and identified_leads_data: # identified_leads_data now opportunity objects
+        opportunities_md_section = ["\n\n## Identified B2B Opportunities\n"]
         if not identified_leads_data:
-            leads_md_section.append("No specific leads were identified or provided for this report section.")
+            opportunities_md_section.append("No specific B2B opportunities were identified by the AI.")
         else:
-            for i, lead in enumerate(identified_leads_data):
-                leads_md_section.append(f"### Lead {i+1}: {lead.get('lead_name', 'N/A')} - {lead.get('lead_title', 'N/A')}")
-                leads_md_section.append(f"-   **Department:** {lead.get('lead_department', 'N/A')}")
-                leads_md_section.append(f"-   **LinkedIn:** {lead.get('linkedin_url', 'N/A') if lead.get('linkedin_url') else 'Not available'}")
-                leads_md_section.append(f"-   **Relevance:** {lead.get('summary_of_relevance', 'N/A')}")
-                if lead.get('named_buyers'):
-                    leads_md_section.append("-   **Potential Named Buyers:**")
-                    for buyer in lead.get('named_buyers', []):
-                        leads_md_section.append(f"    -   {buyer.get('buyer_name', 'N/A')} ({buyer.get('buyer_title', 'N/A')}): {buyer.get('buyer_rationale', 'N/A')}")
-                leads_md_section.append("\n")
-        report_sections.append("\n".join(leads_md_section))
+            for i, opp in enumerate(identified_leads_data):
+                opportunities_md_section.append(f"### Opportunity {i+1}: {opp.get('opportunity_name', 'N/A')}")
+                opportunities_md_section.append(f"**Description:** {opp.get('opportunity_description', 'N/A')}")
+                opportunities_md_section.append(f"**Relevant Departments:** {', '.join(opp.get('relevant_departments', [])) if opp.get('relevant_departments') else 'N/A'}")
+
+                opportunities_md_section.append("\n**Contact Points for this Opportunity:**")
+                if opp.get('contact_points'):
+                    for cp_idx, cp in enumerate(opp.get('contact_points', [])):
+                        opportunities_md_section.append(f"-   **Contact {cp_idx+1}:** {cp.get('contact_name', 'N/A')} ({cp.get('contact_title', 'N/A')})")
+                        opportunities_md_section.append(f"    -   Department: {cp.get('contact_department', 'N/A')}")
+                        opportunities_md_section.append(f"    -   LinkedIn: {cp.get('contact_linkedin_url', 'N/A') if cp.get('contact_linkedin_url') else 'Not available'}")
+                        opportunities_md_section.append(f"    -   Relevance: {cp.get('contact_relevance_to_opportunity', 'N/A')}")
+                else:
+                    opportunities_md_section.append("  No specific contact points identified for this opportunity.")
+
+                opportunities_md_section.append("\n**Potential Decision-Makers for this Opportunity Type:**")
+                if opp.get('potential_decision_makers_for_opportunity'):
+                    for dm_idx, dm in enumerate(opp.get('potential_decision_makers_for_opportunity', [])):
+                        opportunities_md_section.append(f"-   **Decision Maker {dm_idx+1}:** {dm.get('dm_name', 'N/A')} ({dm.get('dm_title', 'N/A')})")
+                        opportunities_md_section.append(f"    -   Rationale: {dm.get('dm_rationale', 'N/A')}")
+                else:
+                    opportunities_md_section.append("  No specific decision-makers identified for this opportunity type.")
+                opportunities_md_section.append("\n---\n") # Separator for each opportunity
+        report_sections.append("\n".join(opportunities_md_section))
 
     if video_url:
         report_sections.append(f"\n\n## Video Source\n- **URL**: {video_url if video_url else 'Not provided'}")
@@ -423,61 +433,90 @@ Please ensure the information is well-organized and clearly presented.
 
 def generate_lead_identification_prompt(company_name: str, title_areas: List[str], company_topic_context: str) -> str:
     """
-    Generates a prompt for identifying leads, their departments, and named buyers.
+    Generates a prompt for identifying B2B sales opportunities and associated contacts/decision-makers.
     """
-    titles_str = ", ".join(f"'{title}'" for title in title_areas)
-    prompt = f"""
-You are a specialized Lead Identification and Market Research AI.
-Your task is to identify up to 5 key individuals (leads) at the company "{company_name}" who match the specified title areas: {titles_str}.
-The research should be informed by the following context about the company's activities related to a specific topic:
-Context: "{company_topic_context[:1500]}" (Context is provided for background, focus on identifying people based on titles and company)
+    # title_areas will be used to guide the identification of contact_points for each opportunity.
+    titles_hint = ""
+    if title_areas:
+        titles_list_str = ", ".join(f"'{t}'" for t in title_areas)
+        titles_hint = f"When identifying contact points for each opportunity, pay special attention to individuals with titles such as {titles_list_str} or similar roles relevant to the opportunity."
 
-For each of the (up to) 5 leads identified, provide the following information in a structured JSON format.
-The output should be a single JSON list, where each item is an object representing a lead:
+    prompt = f"""
+You are a B2B Sales Opportunity Identification AI. Your goal is to identify potential sales opportunities or projects.
+Based on the company "{company_name}", the topic "{company_topic_context.splitlines()[0] if company_topic_context else 'the provided context'}",
+and the following detailed context about the company's activities:
+Context: "{company_topic_context[:2000]}"
+
+Identify up to 3-5 potential B2B sales opportunities or projects within "{company_name}" that are relevant to the topic and context.
+
+For each identified opportunity, provide the following information in a structured JSON format.
+The output MUST be a single JSON list, where each item is an object representing an opportunity:
 {{
-  "lead_name": "string (Full name of the lead)",
-  "lead_title": "string (Exact job title of the lead at {company_name})",
-  "lead_department": "string (Department the lead likely belongs to, e.g., 'Marketing', 'Engineering', 'Product Management')",
-  "linkedin_url": "string (Full LinkedIn profile URL if available, otherwise null)",
-  "summary_of_relevance": "string (Brief 1-2 sentence summary explaining why this person is a relevant lead based on their title and potential connection to the topic context)",
-  "named_buyers": [ // Up to 3 potential named buyers associated with this lead or their area of influence
+  "opportunity_name": "string (Descriptive name of the potential sales opportunity/project, e.g., 'AI-Powered Upgrade for CRM Platform', 'New Data Analytics Initiative for Marketing Dept', 'Development of [TOPIC]-based Solution for [COMPANY_NAME]'s specific need X')",
+  "opportunity_description": "string (Detailed 2-3 sentence description: What is the opportunity? Why is it relevant for [COMPANY_NAME] in relation to the topic? What kind of solution or service might they need? What problem does it solve for them?)",
+  "relevant_departments": ["string", "string", ...], // List of departments within [COMPANY_NAME] most likely involved or benefiting from this opportunity.
+  "contact_points": [ // Up to 3-5 key individuals at {company_name} who would be relevant points of contact for initial discussions about THIS SPECIFIC OPPORTUNITY. {titles_hint}
     {{
-      "buyer_name": "string (Full name of the named buyer)",
-      "buyer_title": "string (Job title of the named buyer)",
-      "buyer_rationale": "string (Brief rationale why this person is considered a potential buyer/influencer for solutions related to the topic, in context of the lead or company)"
-    }},
-    // ... more buyers if applicable (up to 3)
+      "contact_name": "string (Full name of the contact person)",
+      "contact_title": "string (Exact job title of the contact at [COMPANY_NAME])",
+      "contact_department": "string (Their department, if known or inferable)",
+      "contact_linkedin_url": "string (Full LinkedIn profile URL if available, otherwise null)",
+      "contact_relevance_to_opportunity": "string (Briefly explain why this person is a relevant contact for THIS specific opportunity, considering their role and the opportunity's nature)"
+    }}
+  ],
+  "potential_decision_makers_for_opportunity": [ // Up to 3 key individuals at {company_name} likely to be decision-makers or budget-holders for THIS TYPE of opportunity.
+    {{
+      "dm_name": "string (Full name of the decision-maker)",
+      "dm_title": "string (Job title of the decision-maker at {company_name})",
+      "dm_rationale": "string (Briefly explain why this person is likely a decision-maker or budget-holder for this type of opportunity, e.g., based on their seniority, role scope, or typical responsibilities)"
+    }}
   ]
 }}
 
-Example of a single lead object in the list:
+Example of a single opportunity object in the list:
 ```json
 {{
-  "lead_name": "Dr. Eleanor Vance",
-  "lead_title": "VP of AI Research",
-  "lead_department": "Research and Development",
-  "linkedin_url": "https://linkedin.com/in/eleanorvance",
-  "summary_of_relevance": "As VP of AI Research, Dr. Vance is directly involved in the company's strategic direction for AI, making her a key contact for understanding {company_name}'s needs in this area.",
-  "named_buyers": [
+  "opportunity_name": "AI-Driven Predictive Maintenance for Manufacturing Lines",
+  "opportunity_description": "[COMPANY_NAME] could significantly reduce downtime and maintenance costs in their manufacturing division by implementing an AI-driven predictive maintenance solution. This aligns with their stated goals of increasing operational efficiency and leveraging new technologies for [TOPIC].",
+  "relevant_departments": ["Manufacturing", "Operations", "IT", "Data Science"],
+  "contact_points": [
     {{
-      "buyer_name": "Mr. Samuel Green",
-      "buyer_title": "Chief Technology Officer (CTO)",
-      "buyer_rationale": "The CTO typically has budget authority and strategic oversight for technology adoption, including AI initiatives led by Dr. Vance's department."
+      "contact_name": "Sarah Miller",
+      "contact_title": "Director of Plant Operations",
+      "contact_department": "Operations",
+      "contact_linkedin_url": "https://linkedin.com/in/sarahmillerops",
+      "contact_relevance_to_opportunity": "Directly responsible for the efficiency and uptime of manufacturing lines; would be a key stakeholder and initial contact for discussing operational improvements through predictive maintenance."
     }},
     {{
-      "buyer_name": "Ms. Olivia Chen",
-      "buyer_title": "Director of Innovation Strategy",
-      "buyer_rationale": "Works closely with R&D on implementing new technologies and would likely be involved in evaluating solutions related to the topic."
+      "contact_name": "James Lee",
+      "contact_title": "Senior Manager, Data Analytics",
+      "contact_department": "IT / Data Science",
+      "contact_linkedin_url": "https://linkedin.com/in/jamesleedata",
+      "contact_relevance_to_opportunity": "Likely involved in evaluating and implementing the data infrastructure and AI models required for such a solution."
+    }}
+  ],
+  "potential_decision_makers_for_opportunity": [
+    {{
+      "dm_name": "Robert Green",
+      "dm_title": "Chief Operating Officer (COO) at [COMPANY_NAME]",
+      "dm_rationale": "The COO typically oversees large operational expenditures and strategic initiatives aimed at improving efficiency and would likely approve such a project."
+    }},
+    {{
+      "dm_name": "Maria Rodriguez",
+      "dm_title": "VP of Manufacturing at [COMPANY_NAME]",
+      "dm_rationale": "Directly responsible for the manufacturing budget and would be a key approver for solutions impacting production lines."
     }}
   ]
 }}
 ```
 
-IMPORTANT:
-- Return *only* the JSON list. Do not include any introductory text, explanations, or markdown formatting like ```json ... ``` outside the JSON list itself.
-- If no leads are found, return an empty JSON list `[]`.
-- Ensure all string fields are properly escaped within the JSON.
-- Use Google Search to find this information. Prioritize publicly available, professional information.
+IMPORTANT INSTRUCTIONS:
+- The entire response MUST be a single valid JSON list. Do not include any text or explanation before or after the JSON list.
+- If no specific B2B opportunities are identified, return an empty JSON list: `[]`.
+- Ensure all string values within the JSON are properly escaped.
+- Use Google Search to find information to support your identifications. Focus on publicly available professional information.
+- The "contact_points" should be people relevant for *initial discussions* about the specific opportunity you've identified.
+- The "potential_decision_makers_for_opportunity" should be higher-level individuals likely responsible for approving or funding such an initiative.
 """
     return prompt
 
